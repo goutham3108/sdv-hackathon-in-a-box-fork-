@@ -66,10 +66,15 @@ async def verify():
                 actual = list(actual)
             assert actual == expected, (path, actual, expected)
             print(f"PASS {path}: {actual!r}", flush=True)
-        print(f"PASS: {len(cases)} SDK properties decoded correctly", flush=True)
     finally:
         client.GetDatapoints = original_get
         await client.close()
+        # The installed SDK retains its closed gRPC channel in class-level singleton state.
+        # Release it before interpreter shutdown so gRPC's polling thread can stop safely.
+        VehicleDataBrokerClient._stub = None
+        VehicleDataBrokerClient._channel = None
+        VehicleDataBrokerClient._instance = None
+    print(f"PASS: {len(cases)} SDK properties decoded correctly", flush=True)
 
 
 def main():
