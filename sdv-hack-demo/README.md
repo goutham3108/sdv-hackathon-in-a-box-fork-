@@ -1,3 +1,9 @@
+<!--
+Copyright (c) 2026 Contributors to the Eclipse Foundation
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # SDV High-Beam Demo
 
 ## Overview
@@ -135,9 +141,12 @@ cd ~/sdv-demo
 On the build host, run the unit tests and non-publishing app check:
 
 ```bash
-bazel test --config=sdv-demo //sdv-hack-demo/vehicle_app:signal_test_values_test
-bazel run --config=sdv-demo //sdv-hack-demo/vehicle_app:body_signal_test_app -- \
-  --routes "$PWD/sdv-hack-demo/signal_routes.json" --list
+cd inc_someip_gateway
+bazel test --config=sdv-demo --package_path="%workspace%:.." \
+  //sdv-hack-demo/vehicle_app:signal_test_values_test
+bazel run --config=sdv-demo --package_path="%workspace%:.." \
+  //sdv-hack-demo/vehicle_app:body_signal_test_app -- \
+  --routes ../sdv-hack-demo/signal_routes.json --list
 ```
 
 ## Architecture
@@ -245,10 +254,13 @@ to the RPIs.
 The demo also uses `--config=sdv-demo` to compile legacy host C dependencies
 as GNU C11. This avoids GLib's `bool` field conflicting with GCC 15's C23
 default without passing a C-only standard flag to C++ tools. For a native
-bridge build from the workspace root:
+bridge build, run Bazel from the gateway workspace and add the repository root
+to the package path:
 
 ```bash
-bazel build --config=sdv-demo //sdv-hack-demo/bridge:udp_bridge
+cd inc_someip_gateway
+bazel build --config=sdv-demo --package_path="%workspace%:.." \
+  //sdv-hack-demo/bridge:udp_bridge
 ```
 
 ### Raspberry Pis
@@ -283,6 +295,14 @@ bash build-aarch64.sh
 bash package-aarch64.sh
 ```
 
+`build-aarch64.sh` also invokes `build-runtime-aarch64.sh` to clone and patch
+SDV Runtime on the build host, build a `linux/arm64` Docker image, and export
+`dist/sdv-runtime-mw-com-arm64.tar`. Docker Engine and a Buildx builder with
+ARM64 support are required. Copy that image archive to vehicle Pi 1 and load
+it there; the patch folder is not included in the native archives. See the
+[runtime deployment draft](../README-DRAFT.md#sdv-runtime-on-vehicle-pi-1)
+for the container run command using the vehicle's existing broker.
+
 The scripts create these Git-ignored archives:
 
 ```text
@@ -300,8 +320,10 @@ The gateway configuration lives in this folder, not in `inc_someip_gateway`:
 `sdv-hack-demo/config/mw_someip_config.json`, built by
 `//sdv-hack-demo:gateway_config` and packaged as `mw_someip_config.bin`.
 The gateway's generic example config is not used (it only declares window-control
-and echo services). Packaging selects `bazel-out/aarch64-fastbuild/bin` in both
-Bazel workspaces rather than the most recent `bazel-bin` link.
+and echo services). Demo targets are built in the `inc_someip_gateway/` workspace
+with the repository root on Bazel's package path. Packaging selects
+`bazel-out/aarch64-fastbuild/bin` from that workspace and `communication/`
+rather than the most recent `bazel-bin` link.
 
 The gateway keys its SOCom connectors by service type name, so one type must
 not have both a local and a remote instance. The demo config therefore uses
@@ -328,16 +350,18 @@ high-beam Tx offer, avoiding a self-conflicting second skeleton.
 `inc_someip_gateway` is upstream `eclipse-score/inc_someip_gateway` `main` (commit `32624b21`) plus the
 local changes shown by `git -C inc_someip_gateway diff` (serializer/schema extensions for speed and
 boolean events, `eventgroup_ids` handling and trace logging in `someipd`, and in `gatewayd` the
-empty-handle guard, proxy-creation retry and `App->SOME/IP` trace line). Two upstream bumps are
-deliberately **not** taken because they change the LoLa runtime that KUKSA also links
-(`communication/`): `score_communication` stays `0.3.0` and `score_baselibs` stays `0.2.12` in
-`inc_someip_gateway/MODULE.bazel`. As a consequence upstream's mw::com IPC binding
+empty-handle guard, proxy-creation retry and `App->SOME/IP` trace line). The gateway and
+communication Bazel modules use local path overrides for the repository's
+`communication/` and `baselibs/` sources, matching KUKSA's Cargo dependencies.
+Mixing the former fetched runtime with the local runtime causes incompatible
+shared-memory event metadata. Rebuild and redeploy the complete stack together
+and clear old shared-memory state before restarting. Upstream's mw::com IPC binding
 (`//score/gateway_ipc_binding:gateway_ipc_binding_mw_com`) and its aggregate test are disabled with
 `target_compatible_with`; re-enable them only when `communication/` and the gateway are upgraded
-together and the whole flow is re-validated.
+together and that separate binding is re-validated.
 
 The vehicle archive includes the gateway executables and runfiles, `udp_bridge`,
-`databroker-mw-com-demo`, `databroker-cli`, the KUKSA provider configuration
+`databroker-mw-com`, `databroker-cli`, the KUKSA provider configuration
 files, legacy `score_app` app and its runfiles, serializer, and
 launch/configuration files. It excludes `kuksa_high_beam_udp_provider`, which
 is separate from the bridge and unnecessary for the KUKSA-to-mw::com path. The

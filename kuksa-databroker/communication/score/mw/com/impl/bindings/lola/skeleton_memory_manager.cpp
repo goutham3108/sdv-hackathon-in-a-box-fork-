@@ -1,0 +1,837 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/skeleton_memory_manager.h"
+#include "score/mw/com/impl/bindings/lola/application_id_pid_mapping_entry.h"
+#include "score/mw/com/impl/bindings/lola/event_control.h"
+#include "score/mw/com/impl/bindings/lola/event_data_control.h"
+#include "score/mw/com/impl/bindings/lola/i_shm_path_builder.h"
+#include "score/mw/com/impl/bindings/lola/service_data_control.h"
+#include "score/mw/com/impl/bindings/lola/service_data_storage.h"
+#include "score/mw/com/impl/bindings/lola/tracing/tracing_runtime.h"
+#include "score/mw/com/impl/bindings/lola/transaction_log.h"
+#include "score/mw/com/impl/bindings/lola/transaction_log_set.h"
+#include "score/mw/com/impl/com_error.h"
+#include "score/mw/com/impl/configuration/lola_service_instance_deployment.h"
+#include "score/mw/com/impl/configuration/lola_service_type_deployment.h"
+#include "score/mw/com/impl/configuration/quality_type.h"
+
+#include "score/mw/com/impl/runtime.h"
+#include "score/mw/com/impl/skeleton_event_binding.h"
+
+#include "score/language/safecpp/safe_math/safe_math.h"
+#include "score/memory/data_type_size_info.h"
+#include "score/memory/shared/managed_memory_resource.h"
+#include "score/memory/shared/new_delete_delegate_resource.h"
+#include "score/memory/shared/pointer_arithmetic_util.h"
+#include "score/memory/shared/shared_memory_factory.h"
+#include "score/mw/log/logging.h"
+#include "score/os/acl.h"
+#include "score/result/result.h"
+
+#include <score/assert.hpp>
+#include <score/span.hpp>
+#include <sys/types.h>
+
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <unordered_map>
+#include <vector>
+
+namespace score::mw::com::impl::lola
+{
+namespace
+{
+
+ServiceDataControl* GetServiceDataControlSkeletonSide(const memory::shared::ManagedMemoryResource& control)
+{
+    // Suppress "AUTOSAR C++14 M5-2-8" rule. The rule declares:
+    // An object with integer type or pointer to void type shall not be converted to an object with pointer type.
+    // The "ServiceDataStorage" type is strongly defined as shared IPC data between Proxy and Skeleton.
+    // coverity[autosar_cpp14_m5_2_8_violation]
+    auto* const service_data_control = static_cast<ServiceDataControl*>(control.getUsableBaseAddress());
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(service_data_control != nullptr,
+                                                "Could not retrieve service data control.");
+    return service_data_control;
+}
+
+ServiceDataStorage* GetServiceDataStorageSkeletonSide(const memory::shared::ManagedMemoryResource& data)
+{
+    // Suppress "AUTOSAR C++14 M5-2-8" rule. The rule declares:
+    // An object with integer type or pointer to void type shall not be converted to an object with pointer type.
+    // The "ServiceDataStorage" type is strongly defined as shared IPC data between Proxy and Skeleton.
+    // coverity[autosar_cpp14_m5_2_8_violation]
+    auto* const service_data_storage = static_cast<ServiceDataStorage*>(data.getUsableBaseAddress());
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(service_data_storage != nullptr,
+                                                "Could not retrieve service data storage within shared-memory.");
+    return service_data_storage;
+}
+
+std::string GetControlChannelShmPath(const LolaServiceInstanceDeployment& lola_service_instance_deployment,
+                                     const QualityType quality_type,
+                                     const IShmPathBuilder& shm_path_builder)
+{
+    const auto instance_id = lola_service_instance_deployment.instance_id_.value().GetId();
+    return shm_path_builder.GetControlChannelShmName(instance_id, quality_type);
+}
+
+std::string GetDataChannelShmPath(const LolaServiceInstanceDeployment& lola_service_instance_deployment,
+                                  const IShmPathBuilder& shm_path_builder)
+{
+    const auto instance_id = lola_service_instance_deployment.instance_id_.value().GetId();
+    return shm_path_builder.GetDataChannelShmName(instance_id);
+}
+
+enum class ShmObjectType : std::uint8_t
+{
+    kControl_QM = 0x00,
+    kControl_ASIL_B = 0x01,
+    kData = 0x02,
+};
+
+std::uint64_t CalculateMemoryResourceId(const LolaServiceTypeDeployment::ServiceId lola_service_id,
+                                        const LolaServiceInstanceId::InstanceId lola_instance_id,
+                                        const ShmObjectType object_type)
+{
+    return ((static_cast<std::uint64_t>(lola_service_id) << 24U) +
+            (static_cast<std::uint64_t>(lola_instance_id) << 8U) + static_cast<std::uint8_t>(object_type));
+}
+
+}  // namespace
+
+SkeletonMemoryManager::SkeletonMemoryManager(QualityType quality_type,
+                                             const IShmPathBuilder& shm_path_builder,
+                                             const LolaServiceInstanceDeployment& lola_service_instance_deployment,
+                                             const LolaServiceTypeDeployment& lola_service_type_deployment,
+                                             const LolaServiceInstanceId::InstanceId lola_instance_id,
+                                             const LolaServiceTypeDeployment::ServiceId lola_service_id)
+    : quality_type_{quality_type},
+      shm_path_builder_{shm_path_builder},
+      lola_service_instance_deployment_{lola_service_instance_deployment},
+      lola_service_type_deployment_{lola_service_type_deployment},
+      lola_instance_id_{lola_instance_id},
+      lola_service_id_{lola_service_id},
+      data_storage_path_{},
+      data_control_qm_path_{},
+      data_control_asil_path_{},
+      storage_{nullptr},
+      control_qm_{nullptr},
+      control_asil_b_{nullptr},
+      number_of_events_and_fields_{},
+      storage_resource_{},
+      control_qm_resource_{},
+      control_asil_resource_{}
+{
+}
+
+auto SkeletonMemoryManager::CreateSharedMemory(
+    SkeletonBinding::SkeletonEventBindings& events,
+    SkeletonBinding::SkeletonFieldBindings& fields,
+    std::optional<SkeletonBinding::RegisterShmObjectTraceCallback> register_shm_object_trace_callback) -> Result<void>
+{
+    // The number of service-elements determines the (fixed) capacity of the containers within ServiceDataStorage and
+    // ServiceDataControl. It has to be known before either of them is constructed (in CreateSharedMemoryForData /
+    // CreateSharedMemoryForControl below), independent of how the shm-object sizes are determined (simulation,
+    // analytic estimation, or manually specified sizes).
+    number_of_events_and_fields_ = events.size() + fields.size();
+
+    const auto storage_size_calc_result = CalculateShmResourceStorageSizes(events, fields);
+
+    if (!CreateSharedMemoryForControl(
+            lola_service_instance_deployment_, QualityType::kASIL_QM, storage_size_calc_result.control_qm_size))
+    {
+        return MakeUnexpected(ComErrc::kErroneousFileHandle, "Could not create shared memory object for control QM");
+    }
+
+    if ((quality_type_ == QualityType::kASIL_B) &&
+        (!CreateSharedMemoryForControl(lola_service_instance_deployment_,
+                                       QualityType::kASIL_B,
+                                       storage_size_calc_result.control_asil_b_size.value())))
+    {
+        return MakeUnexpected(ComErrc::kErroneousFileHandle,
+                              "Could not create shared memory object for control ASIL-B");
+    }
+
+    if (!CreateSharedMemoryForData(lola_service_instance_deployment_,
+                                   storage_size_calc_result.data_size,
+                                   std::move(register_shm_object_trace_callback)))
+    {
+        return MakeUnexpected(ComErrc::kErroneousFileHandle, "Could not create shared memory object for data");
+    }
+    return {};
+}
+
+auto SkeletonMemoryManager::OpenExistingSharedMemory(
+    std::optional<SkeletonBinding::RegisterShmObjectTraceCallback> register_shm_object_trace_callback) -> Result<void>
+{
+    if (!OpenSharedMemoryForControl(QualityType::kASIL_QM))
+    {
+        return MakeUnexpected(ComErrc::kErroneousFileHandle, "Could not open shared memory object for control QM");
+    }
+
+    if ((quality_type_ == QualityType::kASIL_B) && (!OpenSharedMemoryForControl(QualityType::kASIL_B)))
+    {
+        return MakeUnexpected(ComErrc::kErroneousFileHandle, "Could not open shared memory object for control ASIL-B");
+    }
+
+    if (!OpenSharedMemoryForData(std::move(register_shm_object_trace_callback)))
+    {
+        return MakeUnexpected(ComErrc::kErroneousFileHandle, "Could not open shared memory object for data");
+    }
+    return {};
+}
+
+auto SkeletonMemoryManager::CreateEventControlsInCreatedSharedMemory(const ElementFqId element_fq_id,
+                                                                     const SkeletonEventProperties& element_properties)
+    -> std::pair<std::reference_wrapper<EventControl>, EventControl*>
+{
+    auto& provider_event_control_qm = EmplaceEventControl(QualityType::kASIL_QM, element_fq_id, element_properties);
+    if (control_asil_resource_ == nullptr)
+
+    {
+        return {provider_event_control_qm, nullptr};
+    }
+
+    auto& provider_event_control_asil_b = EmplaceEventControl(QualityType::kASIL_B, element_fq_id, element_properties);
+
+    return {provider_event_control_qm, &provider_event_control_asil_b};
+}
+
+EventDataStorage& SkeletonMemoryManager::CreateEventDataInCreatedSharedMemory(
+    const ElementFqId element_fq_id,
+    const SkeletonEventProperties& element_properties,
+    memory::DataTypeSizeInfo sample_size_info,
+    const std::optional<InitializeSampleCallback>& initialize_sample_callback)
+{
+    return storage_->AddEvent(element_fq_id,
+                              static_cast<SlotIndexType>(element_properties.GetTotalNumberOfSlots()),
+                              sample_size_info,
+                              initialize_sample_callback);
+}
+
+auto SkeletonMemoryManager::RetrieveEventDataFromOpenedSharedMemory(const ElementFqId element_fq_id)
+    -> EventDataStorage&
+{
+    score::cpp::ignore = storage_->GetEventMetaInfo(element_fq_id);
+
+    return storage_->GetEventDataStorage(element_fq_id);
+}
+
+auto SkeletonMemoryManager::RetrieveEventControlsFromOpenedSharedMemory(const ElementFqId element_fq_id)
+    -> std::pair<std::reference_wrapper<EventControl>, EventControl*>
+{
+    auto* const event_control_qm_it = control_qm_->event_controls_.find(element_fq_id);
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(event_control_qm_it != control_qm_->event_controls_.cend(),
+                                                "Could not find element fq id in map");
+    EventControl& event_control_qm = event_control_qm_it->second;
+    if (quality_type_ == QualityType::kASIL_QM)
+    {
+        return {event_control_qm, nullptr};
+    }
+
+    auto* const event_control_asil_b_it = control_asil_b_->event_controls_.find(element_fq_id);
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(event_control_asil_b_it != control_asil_b_->event_controls_.cend(),
+                                                "Could not find asil b element fq id in map");
+    EventControl& event_control_asil_b = event_control_asil_b_it->second;
+
+    // Suppress "AUTOSAR C++14 A3-8-1":
+    // Justification: The "event_data_control_asil_b" and "typed_event_data_storage_ptr" are still valid lifetime even
+    // returned pointer to internal state until Skeleton object is alive.
+    // coverity[autosar_cpp14_a3_8_1_violation]
+    return {// The lifetime of the "event_data_control_asil_b" object lasts as long as the Skeleton is alive.
+            // coverity[autosar_cpp14_m7_5_1_violation]
+            // coverity[autosar_cpp14_m7_5_2_violation]
+            // coverity[autosar_cpp14_a3_8_1_violation]
+            event_control_qm,
+            &event_control_asil_b};
+}
+
+void SkeletonMemoryManager::RollbackSkeletonTracingTransactions(EventControl& event_control)
+{
+    ConsumerEventDataControlLocalView<> consumer_event_data_control_local{event_control.data_control};
+    auto rollback_result = event_control.transaction_log_set_.RollbackSkeletonTracingTransactions(
+        [&consumer_event_data_control_local](const TransactionLog::SlotIndexType slot_index) {
+            consumer_event_data_control_local.DereferenceEventWithoutTransactionLogging(slot_index);
+        });
+    if (!rollback_result.has_value())
+    {
+        ::score::mw::log::LogWarn("lola")
+            << "SkeletonEvent: PrepareOffer failed: Could not rollback tracing consumer after "
+               "crash. Disabling tracing.";
+        impl::Runtime::getInstance().GetTracingRuntime()->DisableTracing();
+    }
+}
+
+void SkeletonMemoryManager::RemoveSharedMemory()
+{
+    constexpr auto RemoveMemoryIfExists = [](const std::optional<std::string>& path) -> void {
+        if (path.has_value())
+        {
+            score::memory::shared::SharedMemoryFactory::Remove(path.value());
+        }
+    };
+    RemoveMemoryIfExists(data_control_qm_path_);
+    RemoveMemoryIfExists(data_control_asil_path_);
+    RemoveMemoryIfExists(data_storage_path_);
+
+    storage_resource_.reset();
+    control_qm_resource_.reset();
+    control_asil_resource_.reset();
+}
+
+void SkeletonMemoryManager::RemoveStaleSharedMemoryArtefacts() const
+{
+    const auto control_qm_path =
+        GetControlChannelShmPath(lola_service_instance_deployment_, QualityType::kASIL_QM, shm_path_builder_);
+    const auto control_asil_b_path =
+        GetControlChannelShmPath(lola_service_instance_deployment_, QualityType::kASIL_B, shm_path_builder_);
+    const auto data_path = GetDataChannelShmPath(lola_service_instance_deployment_, shm_path_builder_);
+
+    memory::shared::SharedMemoryFactory::RemoveStaleArtefacts(control_qm_path);
+    memory::shared::SharedMemoryFactory::RemoveStaleArtefacts(control_asil_b_path);
+    memory::shared::SharedMemoryFactory::RemoveStaleArtefacts(data_path);
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3": std::terminate() should not be called implicitly.
+// This is a false positive, there is no way for calling std::terminate().
+// coverity[autosar_cpp14_a15_5_3_violation : FALSE]
+void SkeletonMemoryManager::CleanupSharedMemoryAfterCrash()
+{
+    for (auto& event : control_qm_->event_controls_)
+    {
+        ProviderEventDataControlLocalView<> provider_event_data_control_local{event.second.data_control};
+        provider_event_data_control_local.RemoveAllocationsForWriting();
+    }
+
+    if (control_asil_b_ != nullptr)
+    {
+        for (auto& event : control_asil_b_->event_controls_)
+        {
+            ProviderEventDataControlLocalView<> provider_event_data_control_local{event.second.data_control};
+            provider_event_data_control_local.RemoveAllocationsForWriting();
+        }
+    }
+}
+
+void SkeletonMemoryManager::Reset()
+{
+    storage_ = nullptr;
+    control_qm_ = nullptr;
+    control_asil_b_ = nullptr;
+}
+
+SkeletonMemoryManager::ShmResourceStorageSizes SkeletonMemoryManager::CalculateShmResourceStorageSizes(
+    SkeletonBinding::SkeletonEventBindings& events,
+    SkeletonBinding::SkeletonFieldBindings& fields)
+{
+    const auto shm_size_calculation_mode =
+        GetBindingRuntime<lola::IRuntime>(BindingType::kLoLa).GetShmSizeCalculationMode();
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE((shm_size_calculation_mode == ShmSizeCalculationMode::kSimulation) ||
+                                                    (shm_size_calculation_mode == ShmSizeCalculationMode::kAnalysis),
+                                                "No other shm size calculation mode is currently supported");
+
+    if ((lola_service_instance_deployment_.shared_memory_size_.has_value()) &&
+        (lola_service_instance_deployment_.control_asil_b_memory_size_.has_value()) &&
+        (lola_service_instance_deployment_.control_qm_memory_size_.has_value()))
+    {
+        score::mw::log::LogInfo("lola")
+            << "shm-size, control-asil-b-shm-size and control-qm-shm-size manually specified "
+               "for service_id:instance_id "
+            << lola_service_id_
+            << ":"
+            // coverity[autosar_cpp14_a18_9_2_violation]
+            << lola_instance_id_
+            << "- Make sure that this value is sufficiently big to"
+               "avoid aborts at runtime.";
+        return {lola_service_instance_deployment_.shared_memory_size_.value(),
+                lola_service_instance_deployment_.control_qm_memory_size_.value(),
+                lola_service_instance_deployment_.control_asil_b_memory_size_.value()};
+    }
+
+    // Depending on the configured ShmSizeCalculationMode the required sizes of the shm-objects are determined either:
+    //  - analytically (kAnalysis): possible because ServiceDataStorage (data shm-object) and ServiceDataControl
+    //    (control shm-object) exclusively use fixed-capacity containers, or
+    //  - by a simulation dry-run (kSimulation): the shm-objects are constructed on a monitoring heap-memory-resource
+    //    and the resulting number of allocated bytes is read out.
+    ShmResourceStorageSizes required_shm_storage_size{};
+    if (shm_size_calculation_mode == ShmSizeCalculationMode::kAnalysis)
+    {
+        const std::size_t data_size = CalculateDataShmResourceStorageSize(events, fields);
+        const std::size_t control_size = CalculateControlShmResourceStorageSize(events, fields);
+        const auto control_asil_b_size = (quality_type_ == QualityType::kASIL_B)
+                                             ? std::optional<std::size_t>{control_size}
+                                             : std::optional<std::size_t>{};
+        required_shm_storage_size = ShmResourceStorageSizes{data_size, control_size, control_asil_b_size};
+    }
+    else
+    {
+        required_shm_storage_size = CalculateShmResourceStorageSizesBySimulation(events, fields);
+    }
+
+    const std::size_t control_asil_b_size_result = required_shm_storage_size.control_asil_b_size.has_value()
+                                                       ? required_shm_storage_size.control_asil_b_size.value()
+                                                       : 0U;
+
+    // Suppress "AUTOSAR C++14 A18-9-2" rule finding: "Forwarding values to other functions shall be done via:
+    // (1) std::move if the value is an rvalue reference, (2) std::forward if the value is forwarding
+    // reference".
+    // Passing result of std::move() as a const reference argument, no move will actually happen.
+    // coverity[autosar_cpp14_a18_9_2_violation]
+    score::mw::log::LogInfo("lola") << "Calculated sizes of shm-objects for service_id:instance_id " << lola_service_id_
+                                    << ":"
+                                    // coverity[autosar_cpp14_a18_9_2_violation]
+                                    << lola_instance_id_
+                                    << " are as follows:\nQM-Ctrl: " << required_shm_storage_size.control_qm_size
+                                    << ", ASIL_B-Ctrl: " << control_asil_b_size_result
+                                    << ", Data: " << required_shm_storage_size.data_size;
+
+    if (lola_service_instance_deployment_.shared_memory_size_.has_value())
+    {
+        score::mw::log::LogInfo("lola") << "shm-size manually specified for service_id:instance_id " << lola_service_id_
+                                        << ":"
+                                        // coverity[autosar_cpp14_a18_9_2_violation]
+                                        << lola_instance_id_
+                                        << "- Make sure that this value is sufficiently big to"
+                                           "avoid aborts at runtime.";
+        required_shm_storage_size.data_size = lola_service_instance_deployment_.shared_memory_size_.value();
+    }
+
+    if (lola_service_instance_deployment_.control_asil_b_memory_size_.has_value())
+    {
+        score::mw::log::LogInfo("lola") << "control-asil-b-shm-size manually specified for service_id:instance_id "
+                                        << lola_service_id_
+                                        << ":"
+                                        // coverity[autosar_cpp14_a18_9_2_violation]
+                                        << lola_instance_id_
+                                        << "- Make sure that this value is sufficiently big to"
+                                           "avoid aborts at runtime.";
+        required_shm_storage_size.control_asil_b_size =
+            lola_service_instance_deployment_.control_asil_b_memory_size_.value();
+    }
+
+    if (lola_service_instance_deployment_.control_qm_memory_size_.has_value())
+    {
+        score::mw::log::LogInfo("lola") << "control-qm-shm-size manually specified for service_id:instance_id "
+                                        << lola_service_id_
+                                        << ":"
+                                        // coverity[autosar_cpp14_a18_9_2_violation]
+                                        << lola_instance_id_
+                                        << "- Make sure that this value is sufficiently big to"
+                                           "avoid aborts at runtime.";
+        required_shm_storage_size.control_qm_size = lola_service_instance_deployment_.control_qm_memory_size_.value();
+    }
+
+    return required_shm_storage_size;
+}
+
+SkeletonMemoryManager::ShmResourceStorageSizes SkeletonMemoryManager::CalculateShmResourceStorageSizesBySimulation(
+    SkeletonBinding::SkeletonEventBindings& events,
+    SkeletonBinding::SkeletonFieldBindings& fields)
+{
+    using NewDeleteDelegateMemoryResource = memory::shared::NewDeleteDelegateMemoryResource;
+
+    // we create up to 3 DryRun Memory Resources and then do the "normal" initialization of control and data
+    // shm-objects on it
+    control_qm_resource_ = std::make_shared<NewDeleteDelegateMemoryResource>(
+        CalculateMemoryResourceId(lola_service_id_, lola_instance_id_, ShmObjectType::kControl_QM));
+
+    storage_resource_ = std::make_shared<NewDeleteDelegateMemoryResource>(
+        CalculateMemoryResourceId(lola_service_id_, lola_instance_id_, ShmObjectType::kData));
+
+    // Note, that it is important to have all DryRun Memory Resources "active" in parallel as the upcoming calls to
+    // PrepareOffer() for the events triggers all SkeletonEvents to register themselves at their parent Skeleton
+    // (lola::SkeletonMemoryManager::Register()), which leads to updates/allocation within ctrl AND data resources!
+    InitializeSharedMemoryForControl(QualityType::kASIL_QM, control_qm_resource_);
+
+    if (quality_type_ == QualityType::kASIL_B)
+    {
+        control_asil_resource_ = std::make_shared<NewDeleteDelegateMemoryResource>(
+            CalculateMemoryResourceId(lola_service_id_, lola_instance_id_, ShmObjectType::kControl_ASIL_B));
+        InitializeSharedMemoryForControl(QualityType::kASIL_B, control_asil_resource_);
+    }
+    InitializeSharedMemoryForData(storage_resource_);
+
+    // Offer events to calculate the shared memory allocated for the control and data segments for each event.
+    // We hand over an empty optional for the initialize_sample_callback, since this simulation-only PrepareOffer()
+    // call is solely used to calculate the required shared-memory size and does not need type-correct
+    // initialization of the (type-erased) storage slots.
+    for (auto& event : events)
+    {
+        score::cpp::ignore = event.second.get().PrepareOffer(std::nullopt);
+    }
+    for (auto& field : fields)
+    {
+        score::cpp::ignore = field.second.get().PrepareOffer(std::nullopt);
+    }
+
+    const auto control_qm_size = control_qm_resource_->GetUserAllocatedBytes();
+    const auto control_data_size = storage_resource_->GetUserAllocatedBytes();
+
+    // PrepareStopOffer events to clean up the events/fields again for the real/next offer done after simulation.
+    for (auto& event : events)
+    {
+        event.second.get().PrepareStopOffer();
+    }
+    for (auto& field : fields)
+    {
+        field.second.get().PrepareStopOffer();
+    }
+
+    const auto control_asil_b_size = (quality_type_ == QualityType::kASIL_B)
+                                         ? std::optional<std::size_t>{control_asil_resource_->GetUserAllocatedBytes()}
+                                         : std::optional<std::size_t>{};
+
+    return ShmResourceStorageSizes{control_data_size, control_qm_size, control_asil_b_size};
+}
+
+std::size_t SkeletonMemoryManager::CalculateDataShmResourceStorageSize(
+    SkeletonBinding::SkeletonEventBindings& events,
+    SkeletonBinding::SkeletonFieldBindings& fields) const
+{
+    // Collect the per service-element sizing information from the deployment configuration and the (typed/generic)
+    // event bindings. The layout-dependent size algorithm itself lives next to ServiceDataStorage
+    // (CalculateServiceDataStorageShmSize), so that the data-structure and the algorithm reasoning about its memory
+    // footprint stay closely coupled.
+    const auto collect_service_elements = [this](std::vector<EventDataStorageSizeInfo>& events_and_fields_size_infos,
+                                                 auto& bindings,
+                                                 const bool are_fields) {
+        for (const auto& binding : bindings)
+        {
+            const std::size_t number_of_slots = GetNumberOfSampleSlotsFromConfig(binding.first, are_fields);
+            SkeletonEventBinding& event_binding = binding.second.get();
+
+            std::ignore = events_and_fields_size_infos.emplace_back(
+                EventDataStorageSizeInfo{number_of_slots, event_binding.GetEventDataTypeSizeInfo()});
+        }
+    };
+    std::vector<EventDataStorageSizeInfo> events_and_fields_size_infos{};
+    collect_service_elements(events_and_fields_size_infos, events, false);
+    collect_service_elements(events_and_fields_size_infos, fields, true);
+
+    return CalculateServiceDataStorageShmSize(events_and_fields_size_infos);
+}
+
+std::size_t SkeletonMemoryManager::CalculateControlShmResourceStorageSize(
+    SkeletonBinding::SkeletonEventBindings& events,
+    SkeletonBinding::SkeletonFieldBindings& fields) const
+{
+    // Collect the per service-element sizing information from the deployment configuration. The layout-dependent size
+    // algorithm itself lives next to ServiceDataControl (CalculateServiceDataControlShmSize), so that the
+    // data-structure and the algorithm reasoning about its memory footprint stay closely coupled.
+
+    const auto collect_service_elements = [this](
+                                              std::vector<ServiceElementControlSizeInfo>& events_and_fields_size_infos,
+                                              auto& bindings,
+                                              const bool are_fields) {
+        for (const auto& binding : bindings)
+        {
+            const std::size_t number_of_slots = GetNumberOfSampleSlotsFromConfig(binding.first, are_fields);
+            const std::size_t max_subscribers = GetMaxSubscribersFromConfig(binding.first, are_fields);
+            events_and_fields_size_infos.push_back(ServiceElementControlSizeInfo{number_of_slots, max_subscribers});
+        }
+    };
+    std::vector<ServiceElementControlSizeInfo> events_and_fields_size_infos{};
+    collect_service_elements(events_and_fields_size_infos, events, false);
+    collect_service_elements(events_and_fields_size_infos, fields, true);
+
+    return CalculateServiceDataControlShmSize(events_and_fields_size_infos);
+}
+
+std::size_t SkeletonMemoryManager::GetNumberOfSampleSlotsFromConfig(const std::string_view service_element_name,
+                                                                    const bool is_field) const
+{
+    const std::string name{service_element_name};
+    if (is_field)
+    {
+        const auto deployment =
+            GetServiceElementInstanceDeployment<ServiceElementType::FIELD>(lola_service_instance_deployment_, name);
+        SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+            deployment.lola_event_instance_deployment_.GetNumberOfSampleSlots().has_value(),
+            "Number of sample slots need to be specified for field on provider side!");
+        return deployment.lola_event_instance_deployment_.GetNumberOfSampleSlots().value();
+    }
+
+    const auto deployment =
+        GetServiceElementInstanceDeployment<ServiceElementType::EVENT>(lola_service_instance_deployment_, name);
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        deployment.GetNumberOfSampleSlots().has_value(),
+        "Number of sample slots need to be specified for event on provider side!");
+    return deployment.GetNumberOfSampleSlots().value();
+}
+
+std::size_t SkeletonMemoryManager::GetMaxSubscribersFromConfig(const std::string_view service_element_name,
+                                                               const bool is_field) const
+{
+    const std::string name{service_element_name};
+    if (is_field)
+    {
+        const auto deployment =
+            GetServiceElementInstanceDeployment<ServiceElementType::FIELD>(lola_service_instance_deployment_, name);
+        SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+            deployment.lola_event_instance_deployment_.max_subscribers_.has_value(),
+            "Max subscribers need to be specified for field on provider side!");
+        return deployment.lola_event_instance_deployment_.max_subscribers_.value();
+    }
+    const auto deployment =
+        GetServiceElementInstanceDeployment<ServiceElementType::EVENT>(lola_service_instance_deployment_, name);
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(deployment.max_subscribers_.has_value(),
+                                                "Max subscribers need to be specified for event on provider side!");
+    return deployment.max_subscribers_.value();
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3":
+// This is a false positive, all results which are accessed with '.value()' that could implicitly call
+// 'std::terminate()' (in case it doesn't have value) has a check in advance using '.has_value()', so no way for
+// throwing std::bad_optional_access which leds to std::terminate(). This suppression should be removed after fixing
+// [Ticket-173043](broken_link_j/Ticket-173043)
+// coverity[autosar_cpp14_a15_5_3_violation : FALSE]
+bool SkeletonMemoryManager::CreateSharedMemoryForData(
+    const LolaServiceInstanceDeployment& lola_service_instance_deployment,
+    const std::size_t shm_size,
+    std::optional<SkeletonBinding::RegisterShmObjectTraceCallback> register_shm_object_trace_callback)
+{
+    memory::shared::SharedMemoryFactory::UserPermissionsMap permissions{};
+    for (const auto& allowed_consumer : lola_service_instance_deployment.allowed_consumer_)
+    {
+        for (const auto& user_identifier : allowed_consumer.second)
+        {
+            permissions[score::os::Acl::Permission::kRead].push_back(user_identifier);
+        }
+    }
+
+    const auto path = shm_path_builder_.GetDataChannelShmName(lola_instance_id_);
+    const bool use_typed_memory = register_shm_object_trace_callback.has_value();
+    const memory::shared::SharedMemoryFactory::UserPermissions user_permissions =
+        ((permissions.empty()) && (!lola_service_instance_deployment.strict_permissions_))
+            ? memory::shared::SharedMemoryFactory::WorldReadable{}
+            : memory::shared::SharedMemoryFactory::UserPermissions{permissions};
+    const auto memory_resource = score::memory::shared::SharedMemoryFactory::Create(
+        path,
+        [this](std::shared_ptr<score::memory::shared::ISharedMemoryResource> memory) {
+            this->InitializeSharedMemoryForData(memory);
+        },
+        shm_size,
+        user_permissions,
+        use_typed_memory);
+    if (memory_resource == nullptr)
+    {
+        return false;
+    }
+    data_storage_path_ = path;
+    if (register_shm_object_trace_callback.has_value() && memory_resource->IsShmInTypedMemory())
+    {
+        // only if the memory_resource could be successfully allocated in typed-memory, we call back the
+        // register_shm_object_trace_callback, because only then the shm-object can be accessed by tracing
+        // subsystem.
+        // Since LoLa creates shm-objects on the granularity of whole service-instances (including ALL its service
+        // elements), we call register_shm_object_trace_callback once and hand over a dummy element name/type!
+        // Other bindings, which might create shm-objects per service-element would call
+        // register_shm_object_trace_callback for each service-element and then use their "real" name and type ...
+        // Suppress "AUTOSAR C++14 A15-4-2" rule finding. This rule states: "I a function is declared to be
+        // , (true) or (<true condition>), then it shall not exit with an exception"
+        // we can't add  to score::cpp::callback signature.
+        // coverity[autosar_cpp14_a15_4_2_violation]
+        register_shm_object_trace_callback.value()(
+            tracing::TracingRuntime::kDummyElementNameForShmRegisterCallback,
+            // Suppress "AUTOSAR C++14 A4-5-1": Enums should not be used as operands to operators (other than
+            // operator[], operator=, operator==, operator!=, * and relational operators).
+            // Justification: The enum is not an operator, it's a function parameter.
+            // coverity[autosar_cpp14_a4_5_1_violation : FALSE]
+            tracing::TracingRuntime::kDummyElementTypeForShmRegisterCallback,
+            memory_resource->GetFileDescriptor(),
+            memory_resource->getBaseAddress());
+    }
+
+    score::mw::log::LogDebug("lola") << "Created shared-memory-object for DATA (S: " << lola_service_id_
+                                     << " I:" << lola_instance_id_ << ")";
+    return true;
+}
+
+bool SkeletonMemoryManager::CreateSharedMemoryForControl(
+    const LolaServiceInstanceDeployment& lola_service_instance_deployment,
+    const QualityType asil_level,
+    const std::size_t shm_size)
+{
+    const auto path = shm_path_builder_.GetControlChannelShmName(lola_instance_id_, asil_level);
+
+    const auto consumer = lola_service_instance_deployment.allowed_consumer_.find(asil_level);
+    auto& control_resource = (asil_level == QualityType::kASIL_QM) ? control_qm_resource_ : control_asil_resource_;
+    auto& data_control_path = (asil_level == QualityType::kASIL_QM) ? data_control_qm_path_ : data_control_asil_path_;
+
+    memory::shared::SharedMemoryFactory::UserPermissionsMap permissions{};
+    if (consumer != lola_service_instance_deployment.allowed_consumer_.cend())
+    {
+        for (const auto& user_identifier : consumer->second)
+        {
+            permissions[score::os::Acl::Permission::kRead].push_back(user_identifier);
+            permissions[score::os::Acl::Permission::kWrite].push_back(user_identifier);
+        }
+    }
+
+    const memory::shared::SharedMemoryFactory::UserPermissions user_permissions =
+        ((permissions.empty()) && (!lola_service_instance_deployment.strict_permissions_))
+            ? memory::shared::SharedMemoryFactory::WorldWritable{}
+            : memory::shared::SharedMemoryFactory::UserPermissions{permissions};
+    control_resource = score::memory::shared::SharedMemoryFactory::Create(
+        path,
+        [this, asil_level](std::shared_ptr<score::memory::shared::ManagedMemoryResource> memory) {
+            this->InitializeSharedMemoryForControl(asil_level, memory);
+        },
+        shm_size,
+        user_permissions);
+    if (control_resource == nullptr)
+    {
+        return false;
+    }
+    data_control_path = path;
+    return true;
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings. This rule states: "The std::terminate() function shall not be called
+// implicitly". This is a false positive, all results which are accessed with '.value()' that could implicitly call
+// 'std::terminate()' (in case it doesn't have value) has a check in advance using '.has_value()', so no way for
+// throwing std::bad_optional_access which leds to std::terminate(). This suppression should be removed after fixing
+// [Ticket-173043](broken_link_j/Ticket-173043)
+// coverity[autosar_cpp14_a15_5_3_violation : FALSE]
+bool SkeletonMemoryManager::OpenSharedMemoryForData(
+    const std::optional<SkeletonBinding::RegisterShmObjectTraceCallback> register_shm_object_trace_callback)
+{
+    const auto path = GetDataChannelShmPath(lola_service_instance_deployment_, shm_path_builder_);
+
+    const auto memory_resource = score::memory::shared::SharedMemoryFactory::Open(path, true);
+    if (memory_resource == nullptr)
+    {
+        return false;
+    }
+    data_storage_path_ = path;
+    storage_resource_ = memory_resource;
+
+    const auto& memory_resource_ref = *memory_resource.get();
+    storage_ = GetServiceDataStorageSkeletonSide(memory_resource_ref);
+
+    // Our pid will have changed after re-start and we now have to update it in the re-opened DATA section.
+    const auto pid = GetBindingRuntime<lola::IRuntime>(BindingType::kLoLa).GetPid();
+    score::mw::log::LogDebug("lola") << "Updating PID of Skeleton (S: " << lola_service_id_
+                                     << " I:" << lola_instance_id_ << ") with:" << pid;
+    storage_->UpdateSkeletonPid(pid);
+
+    if (register_shm_object_trace_callback.has_value() && memory_resource->IsShmInTypedMemory())
+    {
+        // only if the memory_resource could be successfully allocated in typed-memory, we call back the
+        // register_shm_object_trace_callback, because only then the shm-object can be accessed by tracing
+        // subsystem.
+        // Suppress "AUTOSAR C++14 A15-4-2" rule finding. This rule states: "I a function is declared to be
+        // , (true) or (<true condition>), then it shall not exit with an exception"
+        // we can't add  to score::cpp::callback signature.
+        // coverity[autosar_cpp14_a15_4_2_violation]
+        register_shm_object_trace_callback.value()(
+            tracing::TracingRuntime::kDummyElementNameForShmRegisterCallback,
+            // Suppress "AUTOSAR C++14 A4-5-1" rule findings. This rule states: "Expressions with type enum or enum
+            // class shall not be used as operands to built-in and overloaded operators other than the subscript
+            // operator [ ], the assignment operator =, the equality operators == and ! =, the unary & operator, and the
+            // relational operators <,
+            // <=, >, >=.". The enum is not an operand, its a function parameter.
+            // coverity[autosar_cpp14_a4_5_1_violation : FALSE]
+            tracing::TracingRuntime::kDummyElementTypeForShmRegisterCallback,
+            memory_resource->GetFileDescriptor(),
+            memory_resource->getBaseAddress());
+    }
+    return true;
+}
+
+bool SkeletonMemoryManager::OpenSharedMemoryForControl(const QualityType asil_level)
+{
+    const auto path = GetControlChannelShmPath(lola_service_instance_deployment_, asil_level, shm_path_builder_);
+
+    auto& control_resource = (asil_level == QualityType::kASIL_QM) ? control_qm_resource_ : control_asil_resource_;
+    auto& data_control_path = (asil_level == QualityType::kASIL_QM) ? data_control_qm_path_ : data_control_asil_path_;
+
+    control_resource = score::memory::shared::SharedMemoryFactory::Open(path, true);
+    if (control_resource == nullptr)
+    {
+        return false;
+    }
+    data_control_path = path;
+
+    auto& control = (asil_level == QualityType::kASIL_QM) ? control_qm_ : control_asil_b_;
+
+    const auto& control_resource_ref = *control_resource.get();
+    control = GetServiceDataControlSkeletonSide(control_resource_ref);
+
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD(control != nullptr);
+
+    return true;
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings. This rule states: "The std::terminate() function shall not be called
+// implicitly". This is a false positive, there is no way for calling std::terminate().
+// coverity[autosar_cpp14_a15_5_3_violation : FALSE]
+void SkeletonMemoryManager::InitializeSharedMemoryForData(
+    const std::shared_ptr<score::memory::shared::ManagedMemoryResource>& memory)
+{
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        number_of_events_and_fields_.has_value(),
+        "number_of_events_and_fields_ must be set before constructing the ServiceDataStorage.");
+    storage_ = memory->construct<ServiceDataStorage>(number_of_events_and_fields_.value(), *memory);
+    storage_resource_ = memory;
+    // Suppress "AUTOSAR C++14 A0-1-1", The rule states: "A project shall not contain instances of non-volatile
+    // variables being given values that are not subsequently used"
+    // There is no variable instantiation.
+    // coverity[autosar_cpp14_a0_1_1_violation : FALSE]
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        storage_resource_ != nullptr,
+        "storage_resource_ must be no nullptr, otherwise the callback would not be invoked.");
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings. This rule states: "The std::terminate() function shall not be called
+// implicitly". This is a false positive, there is no way for calling std::terminate().
+// coverity[autosar_cpp14_a15_5_3_violation : FALSE]
+void SkeletonMemoryManager::InitializeSharedMemoryForControl(
+    const QualityType asil_level,
+    const std::shared_ptr<score::memory::shared::ManagedMemoryResource>& memory)
+{
+    auto& control = (asil_level == QualityType::kASIL_QM) ? control_qm_ : control_asil_b_;
+
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        number_of_events_and_fields_.has_value(),
+        "number_of_events_and_fields_ must be set before constructing the ServiceDataControl.");
+    control = memory->construct<ServiceDataControl>(number_of_events_and_fields_.value(), *memory);
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD(control != nullptr);
+}
+
+EventControl& SkeletonMemoryManager::EmplaceEventControl(const QualityType asil_level,
+                                                         ElementFqId element_fq_id,
+                                                         const SkeletonEventProperties& element_properties)
+{
+    auto* const service_data_control = (asil_level == QualityType::kASIL_QM) ? control_qm_ : control_asil_b_;
+    auto* const memory_resource =
+        (asil_level == QualityType::kASIL_QM) ? control_qm_resource_.get() : control_asil_resource_.get();
+
+    SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD(service_data_control != nullptr);
+    SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD(memory_resource != nullptr);
+
+    auto control_qm =
+        service_data_control->event_controls_.emplace(std::piecewise_construct,
+                                                      std::forward_as_tuple(element_fq_id),
+                                                      std::forward_as_tuple(element_properties.GetTotalNumberOfSlots(),
+                                                                            element_properties.max_subscribers,
+                                                                            element_properties.enforce_max_samples,
+                                                                            *memory_resource));
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(control_qm.second,
+                                                "Couldn't register/emplace EventControl in control-section.");
+
+    return control_qm.first->second;
+}
+
+}  // namespace score::mw::com::impl::lola

@@ -1,5 +1,7 @@
 # sdv-hackathon-in-a-box
 
+> Draft: existing two-Pi demo instructions plus SDV Runtime image deployment on vehicle Pi 1. The integrated build applies the patch on the build host; the full image build and on-Pi runtime connection still require validation in your environment.
+
 ## Overview
 
 This demo exchanges VSS signals between two Raspberry Pis. The vehicle Pi runs KUKSA Databroker, Eclipse S-CORE mw::com shared memory, a SOME/IP gateway, and a UDP bridge. The remote Pi runs a UDP application with a keyboard menu, GPIO switch, and LED.
@@ -9,6 +11,7 @@ The vehicle application provides a menu for high-beam commands and speed values.
 ## Contents
 
 - [Quick start](#quick-start)
+- [SDV Runtime on vehicle Pi 1](#sdv-runtime-on-vehicle-pi-1)
 - [Prerequisites](#prerequisites)
 - [Operating modes](#operating-modes)
 - [Network configuration](#network-configuration)
@@ -20,71 +23,166 @@ The vehicle application provides a menu for high-beam commands and speed values.
 - [Stop the demo](#stop-the-demo)
 - [Architecture](#architecture)
 - [Project files](#project-files)
+- [Developer guide](#developer-guide-add-a-someip-signal-or-service)
+- [Currently supported VSS signals](#currently-supported-vss-signals)
 
 ## Quick Start
 
-Use an isolated test rig. Complete the [prerequisites](#prerequisites) first; the build requires the full workspace, a configured ARM64 toolchain, and the separately supplied KUKSA integration checkout. Example addresses are vehicle `10.56.121.101` and remote `10.56.121.79`. Replace `<user>` with the SSH account on each Pi.
+Use an isolated test rig. Complete the [prerequisites](#prerequisites) and read the [GPIO safety instructions](#gpio-wiring-and-safety) first; the build requires the full workspace, a configured ARM64 toolchain, and the separately supplied KUKSA integration checkout.
 
-### 1. Build
+### Build, deploy, and run
 
-**Build host, working directory: repository root:**
+Follow these steps for a new or existing deployment. Examples use vehicle Pi `10.187.243.101` and remote Pi `10.187.243.79`; replace addresses and SSH accounts for your network. For a first deployment, skip the stop step and omit removal of an old container.
 
-```bash
-cd sdv-hack-demo
-bash build-aarch64.sh
-bash package-aarch64.sh
-```
+**1. Existing deployment: [stop the runtime and native services](#stop-the-demo).**
 
-Outputs in `sdv-hack-demo/dist/` are `vehicle-aarch64.tar.gz`, `remote-aarch64.tar.gz`, and the separate `body-control-aarch64.tar.gz`. The first two archives are self-contained for Pi runtime; no Bazel or cross-toolchain is needed on the Pis. Rebuild and redeploy matching archives after changing binaries or the signal contract.
+This procedure replaces the deployment without backups. Old deployment state and container-only files, including a manually added application, will be lost. Verify TCP port `55555` is no longer owned by the old broker before starting the replacement.
 
-### 2. Deploy
-
-For an existing deployment, [stop both devices](#stop-the-demo) before replacing files. Back up `network.env` and any state you need; the extraction commands below delete the old deployment, including saved remote state.
-
-**Build host, working directory: `sdv-hack-demo`:**
+**2. Build host: rebuild and package, starting from the repository root.**
 
 ```bash
-scp dist/vehicle-aarch64.tar.gz <user>@10.56.121.101:/tmp/
-scp dist/remote-aarch64.tar.gz <user>@10.56.121.79:/tmp/
+bash sdv-hack-demo/build-aarch64.sh && \
+  bash sdv-hack-demo/package-aarch64.sh
 ```
 
-Enter SSH passwords directly in the terminal when prompted.
+The build regenerates provider types, builds the native stack and remote app, rebuilds the ARM64 runtime model, and runs its typed SDK checks. Packaging embeds `patch/sdv-runtime/sdv-runtime-mw-com.tar` in the vehicle archive and also creates remote and standalone body-control archives. Do not deploy after a failed build or package operation.
 
-**Vehicle Pi, working directory: any directory:**
+**3. Build host: transfer both archives.**
 
 ```bash
-rm -rf ~/sdv-demo
-mkdir -p ~/sdv-demo
-tar -xzf /tmp/vehicle-aarch64.tar.gz -C ~/sdv-demo
+scp sdv-hack-demo/dist/vehicle-aarch64.tar.gz <vehicle-user>@10.187.243.101:/tmp/
+scp sdv-hack-demo/dist/remote-aarch64.tar.gz <remote-user>@10.187.243.79:/tmp/
 ```
 
-**Remote Pi, working directory: any directory:**
+For a localhost-forwarded vECU, use `scp -P 2222 sdv-hack-demo/dist/vehicle-aarch64.tar.gz pi@localhost:/tmp/`. Confirm new SSH host fingerprints through a trusted channel and enter passwords directly in the terminal.
+
+**4. Vehicle Pi: verify and extract the vehicle archive.**
+
+The commands below delete the old deployment before extracting the replacement.
 
 ```bash
-rm -rf ~/sdv-demo
-mkdir -p ~/sdv-demo
-tar -xzf /tmp/remote-aarch64.tar.gz -C ~/sdv-demo
+gzip -t /tmp/vehicle-aarch64.tar.gz &&
+  rm -rf ~/sdv-demo &&
+  mkdir ~/sdv-demo &&
+  tar -xzf /tmp/vehicle-aarch64.tar.gz -C ~/sdv-demo
 ```
 
-Check [network configuration](#network-configuration) on both Pis before starting. Read the [GPIO safety instructions](#gpio-wiring-and-safety) before connecting hardware.
+**5. Remote Pi: verify and extract the remote archive.**
 
-### 3. Run
+```bash
+gzip -t /tmp/remote-aarch64.tar.gz &&
+  rm -rf ~/sdv-demo &&
+  mkdir ~/sdv-demo &&
+  tar -xzf /tmp/remote-aarch64.tar.gz -C ~/sdv-demo
+```
 
-**Remote Pi, working directory: any directory, foreground terminal:**
+**6. Both Pis: edit `~/sdv-demo/network.env` to contain the same peer addresses.**
+
+```bash
+nano ~/sdv-demo/network.env
+```
+
+For example:
+
+```bash
+export SDV_VEHICLE_IP=10.187.243.101
+export SDV_REMOTE_IP=10.187.243.79
+export SDV_BRIDGE_UDP_PORT=35000
+export SDV_REMOTE_UDP_PORT=35001
+```
+
+These lines must be saved in the file, not just entered in the terminal.
+
+**7. Start the remote, then the native vehicle stack in separate foreground terminals.**
+
+Remote Pi:
 
 ```bash
 ~/sdv-demo/run/start-remote.sh
 ```
 
-**Vehicle Pi, working directory: any directory, separate foreground terminal:**
+Vehicle Pi:
 
 ```bash
 ~/sdv-demo/run/start-vehicle.sh
 ```
 
-The default mode starts someipd, gatewayd, the bridge, and KUKSA in the background, then the vehicle menu in the foreground. Allow about two minutes for broker readiness. The remote app handles UDP directly; no remote gateway or SOME/IP daemon is started.
+The default vehicle mode starts someipd, gatewayd, the bridge, and KUKSA in the background, then the vehicle menu in the foreground. Allow about two minutes for broker readiness. The remote app handles UDP directly; no remote gateway or SOME/IP daemon is started.
 
-### 4. Verify
+**8. Vehicle Pi, second terminal: load the new image and recreate the container.**
+
+Install Docker first if needed using [Docker setup](#docker-setup-on-pi-1). Confirm the native broker is listening before continuing:
+
+```bash
+ss -ltnp | grep ':55555'
+```
+
+The old container must already be stopped. Remove it using its actual name or ID; below assumes `sdv-runtime`. On a first launch, omit the `docker rm sdv-runtime &&` line.
+
+```bash
+docker load -i ~/sdv-demo/sdv-runtime-mw-com.tar &&
+  test "$(docker image inspect sdv-runtime:mw-com \
+    --format '{{.Os}}/{{.Architecture}}')" = linux/arm64 &&
+  docker rm sdv-runtime &&
+  docker run -d \
+    --name sdv-runtime \
+    --pull never \
+    --network=host \
+    --ipc=host \
+    -e RUNTIME_NAME=x86-dev \
+    sdv-runtime:mw-com &&
+  docker logs -f sdv-runtime
+```
+
+Proceed only if image loading and the architecture check succeed. Ctrl-C stops following logs, not the container. Merely restarting the old container does not install the new Python model.
+
+**9. Vehicle Pi: verify ordinary SDK reads, not only the diagnostic monitor.**
+
+```bash
+docker exec -i -w /home/dev \
+  -e PYTHONPATH=/home/dev/python-packages sdv-runtime python3 - <<'PY'
+import asyncio
+from vehicle import vehicle
+from velocitas_sdk.vdb.client import VehicleDataBrokerClient
+
+paths = [
+    "Vehicle.Speed",
+    "Vehicle.Body.Lights.Brake.IsActive",
+    "Vehicle.OBD.OilTemperature",
+    "Vehicle.Body.Trunk.Rear.Position",
+    "Vehicle.Body.Mirrors.DriverSide.IsFolded",
+    "Vehicle.Body.Mirrors.PassengerSide.IsFolded",
+    "Vehicle.Powertrain.TractionBattery.CellVoltage.CellVoltages",
+]
+
+async def main():
+    client = VehicleDataBrokerClient()
+    try:
+        for path in paths:
+            node = vehicle
+            for name in path.split(".")[1:]:
+                node = getattr(node, name)
+            print(path, repr((await node.get()).value), flush=True)
+    finally:
+        await client.close()
+
+asyncio.run(main())
+PY
+```
+
+Initially some signals may be unavailable until the remote publishes them. Publish speed using remote option `2`; the SDK must return that value rather than zero. Start your monitor before remote option `4`, then allow about 12 minutes for the full sweep and rerun the SDK check. Brake state now reads `INACTIVE`/`ACTIVE`, corresponding to remote `false`/`true`. The four previously missing properties must no longer raise `AttributeError`. PerformanceMode remains actuator-only and is excluded from feedback verification.
+
+If you add a new application at `/home/dev/main.py` inside the replacement container, run it with:
+
+```bash
+docker exec -it -w /home/dev \
+  -e PYTHONPATH=/home/dev/python-packages \
+  sdv-runtime python3 -u main.py
+```
+
+The earlier diagnostic monitor reads protobuf fields directly. Its successful output alone does not validate the typed SDK; use the ordinary `.get()` check above as well. If your application writes signals rather than being a read-only monitor, review its behavior before running it on the test rig.
+
+### Additional verification
 
 On the remote menu, select `3` and enter `true`, then `false`. Parking lights are software state only; no GPIO is assigned to them.
 
@@ -97,18 +195,77 @@ cd ~/sdv-demo
 
 The current value should follow the remote selection. This checks application feedback, not physical actuation. For outbound high beam, use vehicle menu option `1`; verify remote reception, LED output where available, and returned current value separately. See [menus and verification](#menus-and-verification).
 
-### 5. Stop
+## SDV Runtime on Vehicle Pi 1
 
-Use `q` to exit each foreground app, then follow [Stop the demo](#stop-the-demo) to stop the background processes. Quitting the vehicle menu alone is not a complete stack shutdown.
+### Recommended build location
+
+Build the ARM64 image on the build host, export it, and load it on Pi 1. This avoids compiling Python and Node dependencies on a resource-constrained Pi and allows one image to be reused. Docker Engine and Buildx must already be installed and accessible to your account. An x86_64 build host needs working ARM64 emulation or a native ARM64 builder. See the [Docker multi-platform guide](https://docs.docker.com/build/building/multi-platform/) for host-specific setup.
+
+The Pi needs 64-bit Linux (`uname -m` reports `aarch64`), Docker Engine, enough disk space for the image archive and loaded image, and connectivity to your syncer server. Use `sudo docker` if your account does not have Docker access. Docker group membership grants root-equivalent access.
+
+The patched runtime disables its bundled broker and mocks. It connects to the native mw::com broker started by `start-vehicle.sh` on Pi 1. This container is the syncer/Kit Manager integration, not a replacement for the vehicle, gateway, bridge, or remote applications. Run combined mode, not signals mode or the standalone body-control profile.
+
+The [build and deployment steps](#build-deploy-and-run) save the ARM64 image on the build host and include it in the vehicle archive. No separate image transfer or manual clone is needed on Pi 1. Repackage after rebuilding the image, and do not package an old image after a failed build. Docker image builds require network access to Docker Hub, GitHub, and Python package indexes.
+
+### Docker setup on Pi 1
+
+**Pi 1, one-time setup if Docker is not installed (Raspberry Pi OS / Debian):**
+
+```bash
+sudo apt update
+sudo apt install -y docker.io curl
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Log out and reconnect over SSH for the group change to take effect, then check:
+
+```bash
+docker info
+uname -m
+```
+
+`uname -m` must report `aarch64`. Docker group membership grants root-equivalent access. Pi 1 only loads and runs the image; Git, Buildx, and compilation tools are not needed there. For other distributions, follow the [Docker Engine installation guide](https://docs.docker.com/engine/install/). The build host separately needs Docker Engine, the Buildx plugin, and ARM64 build support.
+
+Use the [startup commands](#build-deploy-and-run) after installing Docker. `docker load` imports the image; do not extract the inner image tar manually. `RUNTIME_NAME=x86-dev` is only a display name, not the image architecture.
+
+The patched image defaults to `DISABLE_DATABROKER=1`, no mock provider, and external broker `127.0.0.1:55555`. Do not override these defaults to start a container broker; the native vehicle launcher already owns that port.
+
+With host networking, `127.0.0.1:55555` is Pi 1's native broker, and Kit Manager uses host port `3090` by default. Ensure that port and MQTT port `1883` are free. Do not add `-p` mappings with host networking. Host IPC is retained from the supplied command but is not needed for the external gRPC broker; it can be omitted to reduce shared-host access. Host networking and IPC expose host resources: use this only on the isolated test rig.
+
+The command uses the image's default syncer server, `https://kit.digitalauto.tech`, which requires connectivity from Pi 1. For a different server, add `-e SYNCER_SERVER_URL="http://<host>:<port>"` before the image name. This is the syncer/kit-server endpoint, not the databroker endpoint. In a vECU, `<host>` must be reachable from inside the guest; guest localhost is not the build host. If vehicle and remote apps share one guest, set both `SDV_VEHICLE_IP` and `SDV_REMOTE_IP` to `127.0.0.1` in their respective native `network.env` files.
+
+### Verify runtime health
+
+```bash
+docker inspect sdv-runtime --format '{{.State.Status}}'
+docker inspect sdv-runtime --format '{{json .State.Health}}'
+docker logs --tail 100 sdv-runtime
+curl --fail http://127.0.0.1:3090/healthz
+```
+
+Wait for startup and check the logs for broker connection and syncer registration failures. Container health/Kit Manager readiness alone does not prove signal delivery or actuation. Confirm Pi 2 feedback appears in native CLI `get`, then verify the same signal through the configured playground/runtime connection. Published current values, accepted commands, and physical actuator operation remain distinct.
+
+### SDK signal compatibility
+
+The provider keeps the existing UDP/shared-memory formats, but registers speed and oil temperature as broker floats for the installed SDK. Brake feedback is converted from wire boolean to VSS strings `INACTIVE`/`ACTIVE`; commands convert back to boolean. `ADAPTIVE` is rejected explicitly because the boolean transport cannot represent it.
+
+The runtime build adds [sdk_extensions.vspec](sdv-hack-demo/sdv-runtime/sdk_extensions.vspec) to model generation for rear trunk position, both mirror folded states, and the cell-voltage array. This uses a separate Dockerfile extension; the existing `sdv-runtime-mw-com.patch` is unchanged. Before exporting the image, the build runs ordinary SDK `.get()` regression checks against controlled protobuf values for all 43 feedback-capable body properties plus speed. These checks do not replace the live remote-to-container sweep.
+
+Rebuild the native provider, remote app, and runtime image, then package and redeploy both archives together. Restart the native broker to register the corrected types, and recreate the runtime container from the newly loaded image. Existing containers do not receive model changes automatically. The image build script reuses the runtime checkout and checks whether each patch is already applied.
+
+For the remote option-4 test, periodic high-beam publishing pauses for the high-beam test sequence (about 15 seconds), then resumes the stored state. During this brief pause, periodic parking feedback also waits; GPIO sampling and command reception continue. Start the monitor before option 4. PerformanceMode remains actuator-only, with no remote feedback subscription.
 
 ## Prerequisites
 
 ### Build Host
 
 - Linux x86_64, Bazel/Bazelisk, Python 3, SSH, and `scp`.
+- Docker Engine and Buildx with `linux/arm64` support for the integrated runtime image build.
 - The full repository workspace, including `communication/` and `inc_someip_gateway/`, not just the demo folder.
 - ARM64 Bazel configuration `aarch64-linux` and the configured cross-toolchain, normally at `$HOME/aarch64_toolchain`.
 - The matching KUKSA integration checkout at `kuksa-databroker/` in the repository root, including `scripts/build-rpi-aarch64.sh`, the mw::com provider, and composition binary. This checkout is absent from this repository snapshot; obtain the matching integration sources before building. An arbitrary upstream KUKSA checkout is not a documented replacement.
+- The matching `baselibs/` checkout in the repository root, containing `score/log_rust/score_log` and `score/containers_rust`, as required by the KUKSA Cargo path dependencies.
 - Network access to both Pis.
 
 The [build script](sdv-hack-demo/build-aarch64.sh) regenerates configs, builds both gateway daemons and demo targets, then invokes the KUKSA ARM64 build. [Dependency compatibility and serializer details](ARCHITECTURE.md) are documented separately.
@@ -150,22 +307,7 @@ KUKSA commands must use VAL v2 `Actuate` or Velocitas VDB `SetDatapoints`. Writi
 
 ## Network Configuration
 
-Both archives include `~/sdv-demo/network.env`. Set matching addresses on both devices after deployment or an IP change.
-
-**Both Pis, working directory: any directory:**
-
-```bash
-nano ~/sdv-demo/network.env
-```
-
-Contents of `network.env` on both Pis (configuration, not a separate command):
-
-```bash
-export HIGH_BEAM_VEHICLE_IP=10.56.121.101
-export HIGH_BEAM_REMOTE_IP=10.56.121.79
-export HIGH_BEAM_BRIDGE_UDP_PORT=35000
-export HIGH_BEAM_REMOTE_UDP_PORT=35001
-```
+Both archives include `~/sdv-demo/network.env`. Set matching addresses on both devices after deployment or an IP change, as shown in the [deployment steps](#build-deploy-and-run).
 
 The remote listens on UDP `35001` and sends feedback to vehicle UDP `35000`. The launchers prevent duplicate instances with locks and reject occupied default UDP ports. Use the launchers rather than manually starting a second stack.
 
@@ -231,7 +373,7 @@ The app detects Pi pin controllers, including `pinctrl-rp1`. For permission erro
 
 ## Test All 44 Signals
 
-Use only an isolated rig. The sweep sends horn, lighting, lock, window, wiper, and powertrain values and does not restore previous state if interrupted. Rebuild/redeploy both matching archives first. Start the remote using the [quick start](#3-run), then launch the tester instead of combined mode. Do not change the remote switch or menu during testing.
+Use only an isolated rig. The sweep sends horn, lighting, lock, window, wiper, and powertrain values and does not restore previous state if interrupted. Rebuild/redeploy both matching archives first. Start the remote using the [quick start](#build-deploy-and-run), then launch the tester instead of combined mode. Do not change the remote switch or menu during testing.
 
 **Vehicle Pi, working directory: any directory:**
 
@@ -268,12 +410,15 @@ cd ~/sdv-demo
 ./body_signal_test_app --routes signal_routes.json --list
 ```
 
-**Build host, working directory: repository root, unit test and non-publishing check:**
+**Build host, starting in the repository root, unit test and non-publishing check:**
 
 ```bash
-bazel test --config=sdv-demo //sdv-hack-demo/vehicle_app:signal_test_values_test
-bazel run --config=sdv-demo //sdv-hack-demo/vehicle_app:body_signal_test_app -- \
-  --routes "$PWD/sdv-hack-demo/signal_routes.json" --list
+cd inc_someip_gateway
+bazel test --config=sdv-demo --package_path="%workspace%:.." \
+  //sdv-hack-demo/vehicle_app:signal_test_values_test
+bazel run --config=sdv-demo --package_path="%workspace%:.." \
+  //sdv-hack-demo/vehicle_app:body_signal_test_app -- \
+  --routes ../sdv-hack-demo/signal_routes.json --list
 ```
 
 ## Signals and Configuration
@@ -293,6 +438,19 @@ python3 sdv-hack-demo/configure_signals_test.py
 Synchronization also updates the communication vehicle-dynamics example and generated KUKSA gateway bindings. Rebuild, package, and redeploy both archives after changes. See [configuration and packaging](ARCHITECTURE.md#configuration-and-packaging) for ownership, generated files, native layouts, and wire formats.
 
 ## Logs and Troubleshooting
+
+### Missing KUKSA Build Artifacts
+
+Packaging requires the ARM64 `databroker-mw-com` and `databroker-cli` executables in `kuksa-databroker/target/aarch64-unknown-linux-gnu/release/`. The Bazel demo build alone does not produce them. If they are missing, complete the KUKSA build and resolve any reported prerequisite failures before packaging.
+
+**Build host, working directory: repository root:**
+
+```bash
+bash kuksa-databroker/scripts/build-rpi-aarch64.sh
+bash sdv-hack-demo/package-aarch64.sh
+```
+
+`Baselibs checkout missing` means the matching integration sources must be supplied at `baselibs/`; do not substitute an arbitrary revision or copy host executables into the ARM64 output directory.
 
 ### Live Logs
 
@@ -376,7 +534,13 @@ find ~/sdv-demo -name 'score_com_serializer_base.so' -type f -print
 
 ## Stop the Demo
 
-Exit foreground menus with `q` first. The launchers leave background daemons running; stop those before redeployment or changing profiles. These process-name commands are intended only for the dedicated demo Pis, not a machine hosting unrelated matching processes.
+Stop the runtime before the native vehicle stack, if the container exists. Use its actual name or ID if different:
+
+```bash
+docker stop sdv-runtime
+```
+
+Exit foreground menus with `q`. The launchers leave background daemons running; stop those before redeployment or changing profiles. These process-name commands are intended only for the dedicated demo Pis, not a machine hosting unrelated matching processes.
 
 Stop the KUKSA retry launcher before its broker so it cannot respawn the broker and hold TCP port `55555`.
 
@@ -437,3 +601,172 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the canonical process/signal flow, ho
 | [Signal routes](sdv-hack-demo/signal_routes.json) | SOME/IP-to-UDP route mappings |
 | [Vehicle app](sdv-hack-demo/vehicle_app) | Vehicle menu and all-signal test application |
 | [Remote app](sdv-hack-demo/remote_app) | Remote menu, GPIO, UDP, and feedback |
+
+
+## Developer Guide: Add a SOME/IP Signal or Service
+
+First decide whether the addition is **another event on the existing body
+service** (`0x4300`) or a **new SOME/IP service** (a new service ID/type). The
+body-signal generator only knows the existing service and its Tx/Rx instances;
+adding a row to `body_signals.json` does not define an arbitrary new service.
+
+### Add an Event to the Existing Body Service
+
+This is the normal path for a new body, door, or powertrain VSS signal:
+
+1. Add one entry to [config/body_signals.json](sdv-hack-demo/config/body_signals.json). Give
+  it a unique `apiName`, `name`, and even `vehicleEvent`; set `datatype` to a
+  supported value (`boolean`, `uint8`, `int16`, `float`, `float_array`, or
+  `string`). `float_array` also needs `maxElements` from 1 to 8. `type` controls
+  the Databroker direction: `sensor` is receive-only, `actuator` is commandable,
+  and an omitted type is bidirectional.
+2. From the workspace root, run the [synchronizer and regression checks](#signals-and-configuration).
+
+  This regenerates the two demo/gateway SOME/IP JSON configs, gatewayd's
+  LoLa manifest, vsomeip service/eventgroup registrations, `signal_routes.json`,
+  the vehicle-dynamics example's body event declarations and LoLa config, the
+  KUKSA `gateway_provider_config.json`, and Rust `gateway_bindings.rs` and
+  `gateway_runtime.rs`. Treat these as generated outputs; update the source
+  entry and generator when the data model changes.
+3. If the datatype is one of the six supported types, check its existing payload
+  codec/test values in `sdv-hack-demo/include/high_beam_udp_protocol.h`,
+  `sdv-hack-demo/remote_app/`, and
+  `sdv-hack-demo/vehicle_app/signal_test_values.h`. A genuinely new datatype
+  needs matching encode/decode and test-value support on both endpoints, plus
+  serializer configuration. UDP frames have a fixed 32-byte payload ceiling.
+4. Choose direction deliberately. The generator emits Tx and Rx wire events,
+  but the provider only registers KUKSA actuation for `actuator` and
+  `bidirectional` mappings. Sensor mappings can update current VSS values but
+  cannot be commanded through KUKSA.
+5. [Build, package, and redeploy](#build-deploy-and-run) both Pi archives together.
+
+  The route table, compiled `mw_someip_config.bin`, gatewayd manifest, and
+  remote app route file must describe the same event IDs and payload format.
+
+### Add a New SOME/IP Service
+
+Do not put a new service into `body_signals.json` and expect the current script
+to create it. The generator hardcodes service ID `17152` (`0x4300`), service
+types `body_control_module_tx` / `body_control_module_rx`, instances `4096` /
+`4097`, and the body's paired event-ID convention. A new service needs a
+separate model/generator path or explicit coordinated edits to the following
+modules.
+
+| Module / owner | Files to update | What must agree |
+| --- | --- | --- |
+| Signal model and generator (`sdv-hack-demo`) | `config/` model, `configure_signals.py`, `gateway_provider_codegen.py` | New service ID, directional instances, event IDs, route metadata, payload limit, and optional KUKSA mapping. Keep generated outputs reproducible instead of hand-editing snapshots only. |
+| SOME/IP gateway config (`sdv-hack-demo`) | `config/mw_someip_config.json`, `BUILD.bazel` | Define service type(s), service/version IDs, events, eventgroups, serializers, and local/remote instance bindings; compile the packaged binary config. |
+| SOME/IP daemon and vsomeip (`inc_someip_gateway`) | `score/config/mw_someip_config.json`, `score/gatewayd/etc/mw_com_config.json`, `tests/integration/vsomeip-gateway-services.json` | gatewayd's SOME/IP event definitions must match someipd's service/instance/event/eventgroup registrations and serializer configuration. |
+| LoLa service API (`communication`) | `score/mw/com/example/vehicle-dynamics-example/com-api-gen/`, `etc/mw_com_config.json`, app source/BUILD | Define the new mw::com interface and payload types, assign LoLa instance specifiers, and implement the producer/consumer. Keep distinct service types for gateway Tx and Rx roles; gateway connectors cannot use one type for both directions. |
+| Databroker provider (`kuksa-databroker`) | `mw_com_provider` config/codegen, generated gateway bindings/runtime, `src/gateway_adapter.rs`, `src/gateway_samples.rs`, compatibility tests | Add VSS path/direction/type mappings if exposed to KUKSA, generated metadata, payload conversion, discovery/subscription/publish handling, and validation tests. The current gateway adapter has explicit body and speed handling, not arbitrary services. |
+| Serializer (`inc_someip_gateway` / demo plugin) | `score/serializer/null_serializer.cpp`, `sdv-hack-demo/serializer/` | Use existing raw/boolean configs only if their byte representation fits. For a new structured payload, implement and test serialization/deserialization and keep native sample size distinct from on-wire payload size. Speed already has a special double-plus-quality path. |
+| Vehicle bridge (`sdv-hack-demo/bridge`) | `main.cpp`, `service_registration.*`, UDP protocol header if needed | The bridge reads routes and registers events generically, so a supported service/event/payload may need only a route. Change bridge/protocol code for new frame semantics, payloads over 32 bytes, or different networking behavior. |
+| Remote endpoint (`sdv-hack-demo/remote_app`) | `main.cpp`, payload helpers/tests, route config | Route lookup is generic, but application behavior and test publishing include signal-specific handling. Add the new service's producer/consumer behavior and tests; do not assume a route alone gives the remote app meaning for a new signal. |
+| Build and deployment (`sdv-hack-demo`) | `build-aarch64.sh`, `package-aarch64.sh`, `deploy/*.sh`, tests | Build every changed binary/config, include new runtime files in the right archive, pass matching manifests at startup, and redeploy both Pis from the same build. |
+
+For every event, keep the full chain consistent:
+
+```text
+VSS path and direction
+  -> provider mapping (optional if Databroker is not involved)
+  -> mw::com service type / instance specifier / event member
+  -> gatewayd service type and event serialization
+  -> SOME/IP service ID / instance ID / event ID / eventgroup
+  -> signal_routes.json service / instance / event / datatype
+  -> UDP payload and remote application behavior
+```
+
+IDs are not inferred from names. Allocate unused SOME/IP IDs within the chosen
+service/instance, make eventgroup membership match the event config, and assign
+valid LoLa IDs independently. For a distinct service, choose a service ID and
+instance layout that do not collide with existing services. If the service is
+also exposed through KUKSA, ensure its metadata and provider direction match
+the VSS entry; `Actuate` is for actuator targets, while current-value updates
+come from received provider samples.
+
+After changes, run the config synchronizer/checks, focused unit tests for the
+generator and payload codecs, build the affected host targets, then follow the
+[build and deployment steps](#build-deploy-and-run). Test the end-to-end route on
+both devices and verify the observed payload at the application boundary; a
+bridge `notify()` or accepted KUKSA actuation alone is not proof of remote
+receipt or physical actuation. The standalone
+`BodyControlModuleService` package is a separate LoLa/KUKSA example and is not
+automatically part of this SOME/IP gateway flow.
+
+
+## Currently Supported VSS Signals
+
+The gateway-compatible KUKSA provider currently has **45 VSS mappings**: the
+44 body, door, and powertrain signals in
+[body_signals.json](sdv-hack-demo/config/body_signals.json), plus `Vehicle.Speed`. The
+body-signal direction and datatype below describe the manifest's wire types;
+broker-facing conversions are described under [SDK signal compatibility](#sdk-signal-compatibility).
+`Vehicle.Speed` comes from [gateway_provider_config.json](sdv-hack-demo/config/gateway_provider_config.json).
+
+### Bidirectional Body Signals
+
+These 37 signals can receive current values and accept KUKSA actuation targets.
+
+| VSS path | Datatype |
+| --- | --- |
+| `Vehicle.Body.Lights.Beam.High.IsOn` | boolean |
+| `Vehicle.Body.Horn.IsActive` | boolean |
+| `Vehicle.Body.Lights.IsHighBeamSwitchOn` | boolean |
+| `Vehicle.Body.Lights.Parking.IsOn` | boolean |
+| `Vehicle.Body.Lights.Running.IsOn` | boolean |
+| `Vehicle.Body.Lights.Fog.Front.IsOn` | boolean |
+| `Vehicle.Body.Lights.Fog.Rear.IsOn` | boolean |
+| `Vehicle.Body.Lights.Hazard.IsSignaling` | boolean |
+| `Vehicle.Body.Lights.DirectionIndicator.Left.IsSignaling` | boolean |
+| `Vehicle.Body.Lights.DirectionIndicator.Right.IsSignaling` | boolean |
+| `Vehicle.Body.Lights.Brake.IsActive` | boolean |
+| `Vehicle.Body.Hood.IsOpen` | boolean |
+| `Vehicle.Body.Trunk.Rear.IsOpen` | boolean |
+| `Vehicle.Body.Trunk.Rear.IsLocked` | boolean |
+| `Vehicle.Body.Trunk.Rear.Position` | uint8 |
+| `Vehicle.Body.Mirrors.DriverSide.IsFolded` | boolean |
+| `Vehicle.Body.Mirrors.PassengerSide.IsFolded` | boolean |
+| `Vehicle.Body.Mirrors.DriverSide.IsHeatingOn` | boolean |
+| `Vehicle.Body.Mirrors.PassengerSide.IsHeatingOn` | boolean |
+| `Vehicle.Body.Windshield.Front.Wiping.Mode` | string |
+| `Vehicle.Body.Windshield.Front.Wiping.Intensity` | uint8 |
+| `Vehicle.Body.Windshield.Front.WasherFluid.Level` | uint8 |
+| `Vehicle.Body.Windshield.Front.WasherFluid.IsLevelLow` | boolean |
+| `Vehicle.Body.Raindetection.Intensity` | uint8 |
+| `Vehicle.Body.Windshield.Front.IsHeatingOn` | boolean |
+| `Vehicle.Body.Windshield.Rear.IsHeatingOn` | boolean |
+| `Vehicle.Cabin.Door.Row1.DriverSide.IsLocked` | boolean |
+| `Vehicle.Cabin.Door.Row1.DriverSide.IsOpen` | boolean |
+| `Vehicle.Cabin.Door.Row1.DriverSide.Window.Position` | uint8 |
+| `Vehicle.Cabin.Door.Row1.DriverSide.IsChildLockActive` | boolean |
+| `Vehicle.Cabin.Door.Row1.PassengerSide.IsLocked` | boolean |
+| `Vehicle.Cabin.Door.Row1.PassengerSide.IsOpen` | boolean |
+| `Vehicle.Cabin.Door.Row1.PassengerSide.Window.Position` | uint8 |
+| `Vehicle.Cabin.Door.Row2.DriverSide.IsLocked` | boolean |
+| `Vehicle.Cabin.Door.Row2.DriverSide.IsOpen` | boolean |
+| `Vehicle.Cabin.Door.Row2.PassengerSide.IsLocked` | boolean |
+| `Vehicle.Cabin.Door.Row2.PassengerSide.IsOpen` | boolean |
+
+### Receive-Only Body Signals
+
+These six sensor signals update their current VSS value from received samples;
+they do not accept KUKSA actuation targets.
+
+| VSS path | Datatype |
+| --- | --- |
+| `Vehicle.Powertrain.CombustionEngine.IsRunning` | boolean |
+| `Vehicle.OBD.OilTemperature` | int16 |
+| `Vehicle.Powertrain.TractionBattery.CellVoltage.CellVoltages` | float_array (up to 8 elements) |
+| `Vehicle.Acceleration.Vertical` | float |
+| `Vehicle.Chassis.Brake.PedalPosition` | uint8 |
+| `Vehicle.Powertrain.FuelSystem.IsEngineStopStartEnabled` | boolean |
+
+### Command-Only and Vehicle-Dynamics Signals
+
+| VSS path | Datatype | Direction / binding |
+| --- | --- | --- |
+| `Vehicle.Powertrain.Transmission.PerformanceMode` | string | Actuator-only; KUKSA commands go to the body Tx event |
+| `Vehicle.Speed` | float (broker); double (wire) | Receive-only; `VehicleDynamicsService` / `network_rx` / `speed` |
+
+`Vehicle.speedAck` is a VehicleDynamics mw::com acknowledgement event, not a
+separate VSS mapping in the KUKSA provider configuration.

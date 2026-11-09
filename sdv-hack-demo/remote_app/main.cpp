@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // This file is a copy of the upstream remote application integration example.
 // It is packaged here so the demo is self-contained under sdv-hack-demo.
 
@@ -98,7 +102,7 @@ bool PublishBooleanUpdate(const int socket_fd, const Route& route,
 }
 
 bool PublishAllBodySignals(const int socket_fd, const std::vector<Route>& routes,
-                           const sockaddr_in& destination) {
+                           const sockaddr_in& destination, std::mutex& high_beam_publish_mutex) {
     std::size_t published = 0;
     for (const auto& route : routes) {
         if (route.service != 17152U) {
@@ -108,6 +112,11 @@ bool PublishAllBodySignals(const int socket_fd, const std::vector<Route>& routes
         if (values.empty()) {
             score::mw::log::LogError() << "Unsupported test datatype for " << route.api_name;
             return false;
+        }
+        std::unique_lock<std::mutex> high_beam_test_lock{high_beam_publish_mutex, std::defer_lock};
+        if (route.name == "high_beam") {
+            // Hold off periodic high-beam frames until the complete test sequence is sent.
+            high_beam_test_lock.lock();
         }
         for (const auto& value : values) {
             high_beam_udp::Frame frame{route.service, route.remote_instance, route.remote_event,
@@ -521,6 +530,7 @@ int main() {
     std::atomic<bool> outbound_state{initial_output};
     std::condition_variable outbound_changed;
     std::mutex outbound_mutex;
+    std::mutex high_beam_publish_mutex;
     std::uint64_t outbound_generation{0U};
 
     const std::uint16_t bridge_port = ResolvePort("SDV_BRIDGE_UDP_PORT", kDefaultBridgePort);
@@ -564,6 +574,7 @@ int main() {
     }
     std::thread input_thread([led_output, &outbound_state, &sensor_store, &routes, &bridge_address, udp_socket,
                               &outbound_changed, &outbound_mutex, &outbound_generation,
+                              &high_beam_publish_mutex,
                               parking_lights, &parking_state]() {
             std::ifstream terminal_input{"/dev/tty"};
             const int terminal_fd = terminal_input.is_open() ? open("/dev/tty", O_RDONLY | O_CLOEXEC) : -1;
@@ -647,7 +658,8 @@ int main() {
                 }
                 if (input == "4") {
                     Say("Publishing test values for all configured body signals...\n");
-                    (void)PublishAllBodySignals(udp_socket, *routes, bridge_address);
+                    (void)PublishAllBodySignals(udp_socket, *routes, bridge_address,
+                                                high_beam_publish_mutex);
                     PrintRemoteMenu();
                     continue;
                 }
@@ -748,6 +760,7 @@ int main() {
             }
             last_sent_generation = outbound_generation;
         }
+        std::lock_guard<std::mutex> publish_lock{high_beam_publish_mutex};
         const bool value = outbound_state.load();
         high_beam_udp::Frame outbound{high_beam->service, high_beam->remote_instance,
                           high_beam->remote_event, 1U,

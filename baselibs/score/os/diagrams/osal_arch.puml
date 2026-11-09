@@ -1,0 +1,143 @@
+@startuml
+!define SWIMLANE_COLOR #E6F3FF
+
+skinparam rectangle {
+    BackgroundColor SWIMLANE_COLOR
+    BorderColor #4A90E2
+    BorderThickness 2
+}
+
+skinparam linetype ortho
+
+rectangle "Linux-specific Code" #E6F3FF {
+  rectangle "Application Layer" #F0F8FF {
+    package "//application/foo" as app_foo {
+      component linux_app [
+        :linux_app
+        << QM >>
+      ]
+    }
+  }
+
+  rectangle "Platform Layer" #F0F8FF {
+    package "//score/os/linux" as os_linux {
+      component module_x [
+        :module_x
+        << QM >>
+      ]
+
+      component module_z_linux [
+        :module_z
+        << QM >>
+      ]
+    }
+
+    note as note_linux1
+        no ASIL-B qualified targets, because Linux is QM
+    end note
+
+    note as note_linux2
+        * Compatible with @platforms//os:linux
+        * Provides Linux-specific APIs (e.g. epoll, timerfd)
+        * restricted visibility
+    end note
+  }
+}
+
+rectangle "OS-agnostic Code" #F0FFF0 {
+  rectangle "Application Layer" #F8FFF8 {
+    package "//application/bar" as app_bar {
+      component os_agnostic_app [
+        :os_agnostic_app
+        << QM >>
+      ]
+    }
+  }
+
+  rectangle "Platform Layer" #F8FFF8 {
+    package "//score/os" as os_generic {
+      component module_a [
+        :module_a
+        << QM >>
+      ]
+
+      component module_b [
+        :module_b
+        << ASIL-B/QM >>
+      ]
+
+      component module_z [
+        :module_z
+        << ASIL-B/QM >>
+      ]
+    }
+
+    note as note_module_z
+        QM on Linux
+        ASIL-B on QNX
+    end note
+
+    note as note_generic
+        * Compatible with @platforms//os:linux and @platforms//os:qnx
+        * Provides OS-agnostic APIs (e.g. mmap)
+        * public visibility
+    end note
+  }
+}
+
+rectangle "QNX-specific Code" #FFF0F0 {
+  rectangle "Application Layer" #FFF8F8 {
+    package "//application/baz" as app_baz {
+      component qnx_app [
+        :qnx_app
+        << QM >>
+      ]
+
+      component qnx_safe_app [
+        :qnx_safe_app
+        << ASIL-B >>
+      ]
+    }
+  }
+
+  rectangle "Platform Layer" #FFF8F8 {
+    package "//score/os/qnx" as os_qnx {
+      component module_y [
+        :module_y
+        << ASIL-B >>
+      ]
+
+      component module_z_qnx [
+        :module_z
+        << ASIL-B/QM >>
+      ]
+    }
+
+    note as note_qnx
+        * Compatible with @platforms//os:qnx
+        * Provides QNX-specific APIs (e.g. channels)
+        * restricted visibility
+    end note
+  }
+}
+
+linux_app -d-> module_x
+linux_app -d-> module_z
+linux_app -d-> module_a
+os_agnostic_app -d-> module_a
+qnx_app -d-> module_a
+qnx_app -d-> module_b
+qnx_app -d-> module_z
+qnx_safe_app -d-> module_b
+qnx_safe_app -d-> module_z_qnx
+module_z_linux -r-> module_z
+module_z_qnx -l-> module_z
+
+os_linux -d- note_linux1
+os_linux -d- note_linux2
+os_generic -d- note_generic
+os_qnx -d- note_qnx
+module_z -d- note_module_z
+module_b -d- note_module_z
+
+@enduml

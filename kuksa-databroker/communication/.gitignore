@@ -1,0 +1,25 @@
+bazel-*
+examples/bazel-*
+user.downloader_config
+user.bazelrc
+_build
+
+# ignore folders created by IDEs
+.vscode
+.idea
+.clwb_aspects
+.clwb
+
+# Ignore clangd's config
+.clangd
+
+# Compilation databases for code completion in IDEs
+.cache/*
+compile_commands.json
+rust-project.json
+
+# docs-as-code
+ubproject.toml
+cpp_coverage_linux/
+cpp_coverage_qnx/
+__pycache__/

@@ -1,0 +1,116 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Do not use automatically C++ generated toolchains
+build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+common --registry=https://raw.githubusercontent.com/eclipse-score/bazel_registry/main/
+common --registry=https://bcr.bazel.build
+
+common --experimental_repository_downloader_retries=10
+common --experimental_scale_timeouts=2.0
+common --http_connector_attempts=10
+common --http_connector_retry_max_timeout=30s
+common --http_timeout_scaling=2.0
+
+# Unset ANDROID_HOME to prevent rules_android from searching for the Android SDK.
+# rules_android is a transitive dependency, and on GitHub runners the Android SDK
+# directory is often deleted while the ANDROID_HOME environment variable remains set.
+common --action_env=ANDROID_HOME=""
+
+common --extra_toolchains=@score_gcc_x86_64_toolchain//:x86_64-linux-gcc_12.2.0
+common --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_x86_64_unknown_linux_gnu
+common --host_platform=@score_bazel_platforms//:x86_64-linux-gcc_12.2.0-posix
+common --//score/json:base_library=nlohmann
+
+build --java_language_version=17
+build --tool_java_language_version=17
+build --java_runtime_version=remotejdk_17
+build --tool_java_runtime_version=remotejdk_17
+build --credential_helper="*.qnx.com=%workspace%/.github/tools/qnx_credential_helper.py"
+build --features=minimal_warnings --features=-strict_warnings --features=warnings_as_errors
+build --incompatible_strict_action_env
+build --per_file_copt=external/.*google_benchmark.*@-Wno-error
+
+# Common flags for tests
+test:_bl_common --build_tests_only
+test --test_output=errors
+
+# Target configuration for CPU:x86-64|OS:Linux build (do not use it in case of system toolchains!)
+build:bl-x86_64-linux --platforms=@score_bazel_platforms//:x86_64-linux-gcc_12.2.0-posix
+build:bl-x86_64-linux --extra_toolchains=@score_gcc_x86_64_toolchain//:x86_64-linux-gcc_12.2.0
+build:bl-x86_64-linux --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_x86_64_unknown_linux_gnu
+test:bl-x86_64-linux --config=_bl_common
+
+# Target configuration for CPU:AArch64|OS:Linux build (do not use it in case of system toolchains!)
+build:bl-aarch64-linux --platforms=@score_bazel_platforms//:aarch64-linux-gcc_12.2.0-posix
+build:bl-aarch64-linux --extra_toolchains=@score_gcc_aarch64_toolchain//:aarch64-linux-gcc_12.2.0
+build:bl-aarch64-linux --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_aarch64_unknown_linux_gnu
+test:bl-aarch64-linux --config=_bl_common
+test:bl-aarch64-linux --test_timeout=300
+test:bl-aarch64-linux --run_under=//:qemu_aarch64
+test:bl-aarch64-linux --test_tag_filters=-no_rust_doc_test
+
+# Target configuration for CPU:x86-64|OS:QNX build (do not use it in case of system toolchains!)
+build:bl-x86_64-qnx --platforms=@score_bazel_platforms//:x86_64-qnx-sdp_8.0.0-posix
+build:bl-x86_64-qnx --extra_toolchains=@score_qcc_x86_64_toolchain//:x86_64-qnx-sdp_8.0.0
+build:bl-x86_64-qnx --extra_toolchains=@score_qnx_x86_64_ifs_toolchain//:ifs-x86_64-qnx-sdp_8.0.0
+build:bl-x86_64-qnx --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_x86_64_pc_nto_qnx800
+test:bl-x86_64-qnx --config=_bl_common
+test:bl-x86_64-qnx --run_under=@score_qnx_unit_tests//src:run_under_qnx
+test:bl-x86_64-qnx --test_lang_filters=cc,rust
+
+# Target configuration for CPU:AArch64|OS:QNX build (do not use it in case of system toolchains!)
+build:bl-aarch64-qnx --platforms=@score_bazel_platforms//:aarch64-qnx-sdp_8.0.0-posix
+build:bl-aarch64-qnx --extra_toolchains=@score_qcc_aarch64_toolchain//:aarch64-qnx-sdp_8.0.0
+build:bl-aarch64-qnx --extra_toolchains=@score_qnx_aarch64_ifs_toolchain//:ifs-aarch64-qnx-sdp_8.0.0
+build:bl-aarch64-qnx --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_aarch64_unknown_nto_qnx800
+test:bl-aarch64-qnx --config=_bl_common
+test:bl-aarch64-qnx --test_timeout=300
+test:bl-aarch64-qnx --run_under=@score_qnx_unit_tests//src:run_under_qnx
+test:bl-aarch64-qnx --test_lang_filters=cc,rust
+
+# Clippy linting for Rust
+build:lint --aspects=@score_rust_policies//clippy:linters.bzl%clippy_strict
+build:lint --output_groups=+rules_lint_human
+build:lint --@aspect_rules_lint//lint:fail_on_violation=true
+
+# LLVM source-based coverage (C++ + Rust): --config=llvm_cov
+import %workspace%/tools/coverage/coverage.bazelrc
+
+# Sanitizer configuration for C++ and Rust
+test:asan_ubsan_lsan --features=asan
+test:asan_ubsan_lsan --features=ubsan
+test:asan_ubsan_lsan --features=lsan
+test:asan_ubsan_lsan --copt -g3
+test:asan_ubsan_lsan --platform_suffix=asan_ubsan_lsan
+test:asan_ubsan_lsan --test_env=ASAN_OPTIONS="exitcode=55 allow_addr2line=1 verbosity=1 coverage=1 check_initialization_order=1 detect_stack_use_after_return=1 print_stats=1 halt_on_error=1 allocator_may_return_null=1 detect_leaks=1"
+test:asan_ubsan_lsan --test_env=UBSAN_OPTIONS="exitcode=55 allow_addr2line=1 verbosity=1 coverage=1 print_stacktrace=1 halt_on_error=1"
+# Partial enablement of sanitizers for Rust. Compile-time checks are not available.
+# Final link of `rust_binary` and `rust_test` is routed through the C++ toolchain linker.
+test:asan_ubsan_lsan --@rules_rust//rust/settings:experimental_use_cc_common_link=True
+# Allow `cc_common.link` to use allocator libraries with mangled symbols, as provided by rustc 1.90.
+test:asan_ubsan_lsan --@rules_rust//rust/settings:experimental_use_allocator_libraries_with_mangled_symbols=True
+
+# Clang-Tidy configuration for C++
+build:clang-tidy --aspects=//tools/lint:linters.bzl%clang_tidy_aspect
+build:clang-tidy --output_groups=rules_lint_human
+build:clang-tidy --extra_toolchains=@llvm_toolchain//:cc-toolchain-x86_64-linux
+build:clang-tidy --@aspect_rules_lint//lint:fail_on_violation=true
+# Once https://github.com/eclipse-score/baselibs/issues/519 is resolved we can remove this line:
+build:clang-tidy --copt=-Wno-error=deprecated-declarations
+build:clang-tidy --copt=-ffp-exception-behavior=strict
+build:clang-tidy --copt=-frounding-math
+
+# Import user-specific configurations
+try-import %workspace%/user.bazelrc

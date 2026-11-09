@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 #ifndef SDV_HACK_DEMO_SIGNAL_TEST_VALUES_H
 #define SDV_HACK_DEMO_SIGNAL_TEST_VALUES_H
 

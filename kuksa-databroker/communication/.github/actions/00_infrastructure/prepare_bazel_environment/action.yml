@@ -1,0 +1,126 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+name: "Bazel Job"
+description: >
+  Sets up the runner for Bazel builds: environment variables, disk space,
+  cache restore, and sandbox. Cache save runs automatically at job end
+  via a post hook (even on failure/cancellation).
+
+  Place your bazel commands as normal 'run:' steps after this action.
+
+inputs:
+  disk-cache:
+    description: >
+      Name of the Bazel disk cache. Leave empty to skip disk caching
+      (e.g. for CodeQL where cached results are undesirable).
+    required: false
+    default: ""
+  cache-mode:
+    description: >
+      Cache mode override. If empty (default), auto-computed from event context:
+      PR/merge_group → read-only, push to main → update-disk, otherwise → disabled.
+      Explicit values: recreate, recreate-update, read-only, update-disk, disabled.
+    required: false
+    default: ""
+  ubuntu-snapshot-mirror-url:
+    description: >
+      Optional secret URL part to override for public Ubuntu snapshot mirror base URL.
+      If set, Bazel downloader rewrites snapshot.ubuntu.com URLs to this mirror first
+      and keeps the original URL as fallback.
+    required: false
+    default: ""
+  repository-cache:
+    description: >
+      Whether to enable Bazel repository cache in setup-bazel.
+      Values: "true" or "false".
+    required: false
+    default: "false"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set environment and compute cache mode
+      shell: bash
+      run: |
+        echo "ANDROID_HOME=" >> "$GITHUB_ENV"
+        echo "ANDROID_SDK_ROOT=" >> "$GITHUB_ENV"
+        echo "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true" >> "$GITHUB_ENV"
+
+        if [[ -n "${{ inputs.cache-mode }}" ]]; then
+          MODE="${{ inputs.cache-mode }}"
+        elif [[ "${{ github.event_name }}" == "pull_request" || "${{ github.event_name }}" == "pull_request_target" || "${{ github.event_name }}" == "merge_group" ]]; then
+          MODE="read-only"
+        elif [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+          MODE="update-disk"
+        else
+          MODE="disabled"
+        fi
+        echo "CACHE_MODE=${MODE}" >> "$GITHUB_ENV"
+        echo "Cache mode: ${MODE}"
+
+    - name: Free Disk Space (Ubuntu)
+      uses: eclipse-score/more-disk-space@v1
+      with:
+        level: 4
+
+    - name: Install Bazelisk
+      uses: bazel-contrib/setup-bazel@0.19.0
+      with:
+        bazelisk-cache: true
+        disk-cache: false
+        repository-cache: ${{ fromJSON(inputs.repository-cache) }}
+        cache-save: ${{ env.CACHE_MODE != 'read-only' && env.CACHE_MODE != 'disabled' }}
+
+    - name: Register post cache save hook and restore caches
+      uses: ./.github/actions/00_infrastructure/setup_bazel_cache
+      with:
+        cache-mode: ${{ env.CACHE_MODE }}
+        disk-cache-name: ${{ inputs.disk-cache }}
+        github-token: ${{ github.token }}
+
+    - name: Configure optional Ubuntu snapshot mirror for Bazel downloader
+      shell: bash
+      env:
+        UBUNTU_SNAPSHOT_MIRROR_URL: ${{ inputs.ubuntu-snapshot-mirror-url }}
+      run: |
+        if [[ -z "${UBUNTU_SNAPSHOT_MIRROR_URL}" ]]; then
+          echo "No override for public Ubuntu snapshot mirror configured; using default snapshot.ubuntu.com URL."
+          exit 0
+        fi
+
+        MIRROR_URL="${UBUNTU_SNAPSHOT_MIRROR_URL}"
+        DOWNLOADER_CONFIG="${GITHUB_WORKSPACE}/user.downloader_config"
+
+        MIRROR_URL="${MIRROR_URL}" DOWNLOADER_CONFIG="${DOWNLOADER_CONFIG}" python3 - <<'PY'
+        import os
+        from pathlib import Path
+
+        mirror_url = os.environ["MIRROR_URL"]
+        downloader_config = Path(os.environ["DOWNLOADER_CONFIG"])
+        downloader_config.write_text(
+            "\n".join([
+                f"rewrite snapshot.ubuntu.com/ubuntu/[^/]*/(.*) {mirror_url}.debmirror.stablebuild.com/2026-04-01T10:40:01Z/archive.ubuntu.com/ubuntu/$1",
+                f"rewrite snapshot.ubuntu.com/ubuntu/[^/]*/(.*) {mirror_url}.debmirror.stablebuild.com/2026-04-01T10:40:01Z/ports.ubuntu.com/$1",
+                # Retain public mirror as fallback should quota of override mirror be exhausted
+                "rewrite snapshot.ubuntu.com/ubuntu/(.*) snapshot.ubuntu.com/ubuntu/$1",
+            ]) + "\n",
+            encoding="utf-8",
+        )
+        PY
+
+        echo "common --downloader_config=${DOWNLOADER_CONFIG}" >> "${GITHUB_WORKSPACE}/user.bazelrc"
+        echo "Configured Bazel downloader mirror with fallback for Ubuntu snapshot URLs."
+
+    - name: Allow linux-sandbox
+      uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@f89865691445b60e9229c36adb1c37b675e1ca85

@@ -1,0 +1,215 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_RUNTIME_H
+#define SCORE_MW_COM_IMPL_RUNTIME_H
+
+#include "score/concurrency/long_running_threads_container.h"
+#include "score/mw/com/impl/binding_type.h"
+#include "score/mw/com/impl/configuration/configuration.h"
+#include "score/mw/com/impl/i_runtime.h"
+#include "score/mw/com/impl/instance_identifier.h"
+#include "score/mw/com/impl/instance_specifier.h"
+#include "score/mw/com/impl/service_discovery.h"
+#include "score/mw/com/impl/tracing/configuration/tracing_filter_config.h"
+#include "score/mw/com/impl/tracing/i_tracing_runtime.h"
+#include "score/mw/com/runtime_configuration.h"
+
+#include <score/assert.hpp>
+#include <score/span.hpp>
+#include <optional>
+
+#include <memory>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
+
+namespace score::mw::com::impl
+{
+
+/**
+ * \brief Runtime/entry point to our ara::com implementation.
+ *
+ * This is a singleton class, which cares for initialization of the entire ara::com subsystem.
+ * Initialization is done based on configuration files (manifests), which have been handed over via cmdline to
+ * the application.
+ *
+ * AUTOSAR AP currently does <b>not</b> demand the existence of a Runtime class or singleton, but already hints on it
+ * being a maybe future extension. (SWS Communication Management 20-11 chapter 7.1.2 Design decisions).
+ *
+ * It only demands a static method/func within namespace score::mw::com::runtime
+ *
+ * \details The singleton implementation is based on a Meyers singleton, which gets returned by getInstanceInternal().
+ *          This singleton instance needs to get initialized with a Configuration object.
+ *          The various overloads of static Initialize() functions differ regarding where/how the configuration is
+ *          loaded/provided. All those Initialize() overloads effectively set the static member initialization_config_,
+ *          which then gets finally moved into the Meyers singleton instance in the call to getInstanceInternal().
+ *          The public getInstance() Method has two functionalities:
+ *          - decide, whether the real Runtime singleton (our Meyers singleton) shall be returned or a mock, if one was
+ *            injected.
+ *          - if it decides to return the real Runtime singleton via getInstanceInternal(), it checks first if already a
+ *            valid configuration has been set/loaded via one of the Initialize() overloads and if not, tries to load
+ *            if from default path, before it delegates to getInstanceInternal().
+ */
+class Runtime final : public IRuntime
+{
+    // Suppress "AUTOSAR C++14 A11-3-1", The rule states: "Friend declarations shall not be used".
+    // Design decision: The "*Attorney" class is a test-only helper, which accesses private members of this class to
+    // verify internal invariants (e.g. that the ctor wires InstanceIdentifier to the configuration_ member).
+    // coverity[autosar_cpp14_a11_3_1_violation]
+    friend class RuntimeAttorney;
+
+  public:
+    /// \brief static initializer for the runtime. Must be called once per process, which intends to use ara::com
+    ///        functionality.
+    /// \attention Multiple calls to one of the Initialize() overloads shall be avoided. They may have no effect after
+    ///            once our Runtime singleton has been created via getInstance()/getInstanceInternal()
+    /// \param runtime_configuration object containing configuration needed to initialize the Runtime
+    static void Initialize(const runtime::RuntimeConfiguration& runtime_configuration);
+
+    /// \brief Extends mw::com subsystem with the given add-on configuration.
+    /// \details This call is optional and shall allow loading additional mw::com configuration files in order to extend
+    /// already loaded configurations.
+    /// \attention This function will call std::terminate() in case no initial configuration has been loaded yet, or
+    /// that the configuration is incompatible to the previously loaded one.
+    /// \param runtime_configuration object containing service definitions which should be added to existing set
+    static Result<void> AddConfiguration(const runtime::RuntimeConfiguration& runtime_configuration);
+
+    /// \brief Extends mw::com subsystem with the given add-on configuration provided as a JSON object.
+    /// \details This call is optional and shall allow loading additional mw::com configuration as an in-memory JSON
+    /// object in order to extend already loaded configurations.
+    /// \attention This function will call std::terminate() in case no initial configuration has been loaded yet, or
+    /// that the configuration is incompatible to the previously loaded one.
+    /// \param json object containing service definitions which should be added to existing set
+    static Result<void> AddConfiguration(score::json::Any json);
+
+    /// \brief get singleton.
+    /// \details Might return either reference to a real Runtime instance or to a mock.
+    /// \return singleton ref.
+    static IRuntime& getInstance();
+
+    /// \brief Inject a mock instance as the runtime singleton. Injecting a nullptr will withdraw the mock again.
+    /// \details If a mock instance is injected, a call to getInstance() will just return the mock and no implicit call
+    ///          to Initialize() will be done. I.e. any config parsing will be completely bypassed.
+    static void InjectMock(IRuntime* const mock) noexcept;
+
+    /// \brief ctor for singleton instance. Should only be used internally.
+    /// \details we make this ctor public (although it somehow breaks the singleton pattern) since this
+    ///          impl::Runtime isn't user facing and just internally used. Having a public ctor eases life
+    ///          in so many places!
+    /// \param config configuration, which was build up during Runtime::Initialize().
+    explicit Runtime(std::pair<Configuration&&, std::optional<tracing::TracingFilterConfig>&&> configs);
+
+    /// \brief Runtime is not copyable/copy-assignable since it shall have singleton semantic.
+    Runtime(const Runtime&) = delete;
+    Runtime& operator=(const Runtime&) & = delete;
+    Runtime(Runtime&&) noexcept = delete;
+    Runtime& operator=(Runtime&&) & noexcept = delete;
+
+    ~Runtime() noexcept override;
+
+    /// \brief Implements score::mw::com::runtime::ResolveInstanceIds
+    /// \param specifier specifier for which resolution shall be done.
+    /// \return resolved instance identifiers for given _specifier_
+    // Suppress "AUTOSAR C++14 A10-3-1" rule finding: Virtual function declaration shall contain exactly one of the
+    // three specifiers: (1) virtual, (2) override, (3) final. Gcc compiler bug leads to a compiler warning if
+    // override is not added, even if final keyword is there. (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=78010)
+    // coverity[autosar_cpp14_a10_3_1_violation]
+    std::vector<InstanceIdentifier> resolve(const InstanceSpecifier& specifier) const final;
+
+    /// \brief see IRuntime::GetBindingRuntime
+    // coverity[autosar_cpp14_a10_3_1_violation]
+    IBindingRuntime* GetBindingRuntime(const BindingType binding) const noexcept final;
+
+    // coverity[autosar_cpp14_a10_3_1_violation]
+    IServiceDiscovery& GetServiceDiscovery() & noexcept final;
+
+    /// \brief see IRuntime::GetTracingFilterConfig
+    // coverity[autosar_cpp14_a10_3_1_violation]
+    const tracing::ITracingFilterConfig* GetTracingFilterConfig() const final;
+
+    /// \brief see IRuntime::GetTracingRuntime
+    // coverity[autosar_cpp14_a10_3_1_violation]
+    tracing::ITracingRuntime* GetTracingRuntime() const noexcept final;
+
+  private:
+    /// \return static Runtime (the real one - not a mock!) configured based on the configuration set by one of the
+    ///         static Initialize() overloads.
+    /// \pre the internal static initialization_config_ has to be initialized with a Configuration.
+    static Runtime& getInstanceInternal();
+
+    /// \brief Extend loaded configuration with the Configuration provided as a parameter. Returns an error if
+    /// configurations are incompatible or there is no regular (complete) configuration loaded yet.
+    static Result<void> HandleAddonConfiguration(const Configuration& config);
+
+    /// \brief Merges the service types and instances into the already loaded configuration. Returns an error if one of
+    /// those entries in the given configuration already exists in this configuration.
+    Result<void> MergeAdditionalConfiguration(const Configuration& additional_configuration) noexcept;
+
+    /// \brief pointer to a mock to be used (set via InjectMock())
+    static score::mw::com::impl::IRuntime* mock_;
+
+    /// \brief mutex to synchronize potentially concurrent calls to initialization logic of Runtime.
+    static std::mutex mutex_;
+
+    /// \brief flag, whether the runtime is now locked in the sense, that the singleton has been already created
+    ///        with a given configuration.
+    static bool runtime_initialization_locked_;
+
+    /// \brief static configuration set by one of the static Initialize() overloads. Will then finally get moved into
+    ///        the singleton instance member configuration_.
+    static std::optional<Configuration> initialization_config_;
+
+    /// \brief configuration
+    ///
+    /// This is the stable, process-lifetime configuration owned by the Runtime singleton.
+    ///
+    /// \details The Runtime constructor registers a pointer to this member via InstanceIdentifier::SetConfiguration()
+    /// so that the InstanceIdentifier deserialization API (InstanceIdentifier::Create) adds reconstructed deployments
+    /// into this configuration.
+    Configuration configuration_;
+
+    /// \brief Tracing configuration parsed from json
+    ///
+    /// Will be filled only if tracing is enabled in the configuration_ and the tracing json file can be found and
+    /// successfully parsed.
+    std::optional<tracing::TracingFilterConfig> tracing_filter_configuration_;
+
+    /// \brief Runtimes for specific bindings (e.g. LoLa, SomeIP etc.)
+    std::unordered_map<BindingType, std::unique_ptr<IBindingRuntime>> binding_runtimes_;
+
+    /// \brief Tracing Runtime which encapsulates all calls to GenericTraceLibrary.
+    ///        This pointer will only be set to a value when a tracing_filter_configuration_ is set.
+    std::unique_ptr<tracing::ITracingRuntime> tracing_runtime_;
+
+    /// \brief Service Discovery
+    ServiceDiscovery service_discovery_;
+
+    /// \brief Executor for long-running tasks, that is handed down to binding-specific runtimes to be also used in
+    ///        their context
+    ///        Should stay last attribute so that it is destructed first
+    concurrency::LongRunningThreadsContainer long_running_threads_;
+};
+
+template <typename RuntimeBinding>
+RuntimeBinding& GetBindingRuntime(const BindingType binding_type)
+{
+    auto& runtime = Runtime::getInstance();
+    auto* const i_runtime_binding = runtime.GetBindingRuntime(binding_type);
+    auto* const runtime_binding = dynamic_cast<RuntimeBinding*>(i_runtime_binding);
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(runtime_binding != nullptr, "Runtime binding does not exist.");
+    return *runtime_binding;
+}
+
+}  // namespace score::mw::com::impl
+
+#endif  // SCORE_MW_COM_IMPL_RUNTIME_H

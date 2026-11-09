@@ -1,0 +1,100 @@
+@startuml static_design
+
+skinparam linetype ortho
+
+note as Note2
+Goals:
+Of this design are to reduce duplicated code
+at user side to perform proper error handling and logging.
+
+By providing a Mixin (ErrorDomain) that translates the
+user defined error codes to user defined messages.
+All other logic (providing log messages, comperators)
+are then already implemented in the Error.
+end note
+
+class "score::result::Error" as Error {
+  template<Code>
+  + Error(Code code, std::string_view user_message)
+  + Error(Code, std::string_view user_message, ErrorDomain const&)
+  + Message(): std::string_view
+  + UserMessage(): std::string_view
+  + operator==(Error const&): bool
+  + operator!=(Error const&): bool
+  + operator*(): ErrorCode
+  --
+  - code_: ErrorCode
+  - domain_: const score::result::ErrorDomain*
+  - user_message_: const std::string_view
+  --
+  Notes: Needs to be non-virtual since needs to be returned by value.
+  Uses ADL of MakeError to get ErrorDomain on first constructor
+}
+
+class "score::Result<T>" as Result {}
+class "score::details::expected<T,E>" as Expected {}
+
+class "score::result::ErrorDomain" as ErrorDomain {
+  + Message(): std::string_view
+  --
+  Notes: User provided Domain shall be constexpr instantiated
+}
+
+package "User Code" {
+
+class "UserDefinedDomain1" as UserDefinedDomain1 {
+  using ErrorCode = UserDefinedErrorCode1;
+  + Message(): std::string_view
+}
+
+class "UserDefinedDomain2" as UserDefinedDomain2 {
+  using ErrorCode = UserDefinedErrorCode2;
+  + Message(): std::string_view
+}
+
+class "UserDefinedErrorCode1" as UserDefinedErrorCode1  {
+  Notes: Enum of type
+  score::result::ErrorCode
+}
+
+class "UserDefinedErrorCode2" as UserDefinedErrorCode2  {
+  Notes: Enum of type
+  score::result::ErrorCode
+}
+
+class "Free Functions" as FreeFunctions2 {
+  MakeError(UserDefinedErrorCode1, std::string_view): score::Result::Error
+  MakeError(UserDefinedErrorCode2, std::string_view): score::Result::Error
+}
+
+legend
+    User defined errors
+endlegend
+
+UserDefinedDomain1 -d[hidden]-> UserDefinedErrorCode1
+UserDefinedDomain2 -d[hidden]-> UserDefinedErrorCode2
+
+}
+
+class "Free Functions" as FreeFunctions1 {
+  ara::log::LogStream& operator<<(ara::log::LogStream& out, const ::score::result::Error& value);
+  std::ostream& operator<<(std::ostream& out, const ::score::result::Error& value);
+  --
+  template<Code>
+  MakeUnexpected(Code, std::string_view): score::Result
+  --
+  Notes: MakeUnexpected uses ADL to resolve to correct MakeError
+}
+
+Result -r-> Error
+Result -d-> Expected
+
+ErrorDomain -l-* Error
+UserDefinedDomain2 -u-|> ErrorDomain
+UserDefinedDomain1 -u-|> ErrorDomain
+
+Expected -d[hidden]-> FreeFunctions1
+UserDefinedErrorCode1 -d[hidden]-> FreeFunctions2
+UserDefinedErrorCode2 -d[hidden]-> FreeFunctions2
+
+@enduml

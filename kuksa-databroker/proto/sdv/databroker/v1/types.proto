@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+package sdv.databroker.v1;
+
+import "google/protobuf/timestamp.proto";
+
+enum DataType {
+  STRING = 0;
+  BOOL = 1;
+  INT8 = 2;
+  INT16 = 3;
+  INT32 = 4;
+  INT64 = 5;
+  UINT8 = 6;
+  UINT16 = 7;
+  UINT32 = 8;
+  UINT64 = 9;
+  FLOAT = 10;
+  DOUBLE = 11;
+  TIMESTAMP = 12;
+  STRING_ARRAY = 20;
+  BOOL_ARRAY = 21;
+  INT8_ARRAY = 22;
+  INT16_ARRAY = 23;
+  INT32_ARRAY = 24;
+  INT64_ARRAY = 25;
+  UINT8_ARRAY = 26;
+  UINT16_ARRAY = 27;
+  UINT32_ARRAY = 28;
+  UINT64_ARRAY = 29;
+  FLOAT_ARRAY = 30;
+  DOUBLE_ARRAY = 31;
+  TIMESTAMP_ARRAY = 32;
+}
+
+enum DatapointError {
+  UNKNOWN_DATAPOINT = 0;
+  INVALID_TYPE = 1;
+  ACCESS_DENIED = 2;
+  INTERNAL_ERROR = 3;
+  OUT_OF_BOUNDS = 4;
+}
+
+enum ChangeType {
+  STATIC = 0;
+  ON_CHANGE = 1;
+  CONTINUOUS = 2;
+}
+
+message StringArray { repeated string values = 1; }
+message BoolArray { repeated bool values = 1; }
+message Int32Array { repeated sint32 values = 1; }
+message Int64Array { repeated sint64 values = 1; }
+message Uint32Array { repeated uint32 values = 1; }
+message Uint64Array { repeated uint64 values = 1; }
+message FloatArray { repeated float values = 1; }
+message DoubleArray { repeated double values = 1; }
+
+message Datapoint {
+  google.protobuf.Timestamp timestamp = 1;
+  enum Failure {
+    INVALID_VALUE = 0;
+    NOT_AVAILABLE = 1;
+    UNKNOWN_DATAPOINT = 2;
+    ACCESS_DENIED = 3;
+    INTERNAL_ERROR = 4;
+  }
+  oneof value {
+    Failure failure_value = 10;
+    string string_value = 11;
+    bool bool_value = 12;
+    sint32 int32_value = 13;
+    sint64 int64_value = 14;
+    uint32 uint32_value = 15;
+    uint64 uint64_value = 16;
+    float float_value = 17;
+    double double_value = 18;
+    StringArray string_array = 21;
+    BoolArray bool_array = 22;
+    Int32Array int32_array = 23;
+    Int64Array int64_array = 24;
+    Uint32Array uint32_array = 25;
+    Uint64Array uint64_array = 26;
+    FloatArray float_array = 27;
+    DoubleArray double_array = 28;
+  }
+}
+
+message Metadata {
+  int32 id = 1;
+  string name = 4;
+  DataType data_type = 5;
+  ChangeType change_type = 6;
+  string description = 7;
+}

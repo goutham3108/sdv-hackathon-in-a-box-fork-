@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Generate KUKSA bindings for the existing gateway's Tx/Rx contract."""
 
 import json
@@ -33,6 +37,11 @@ def gateway_provider_documents(root):
             "cycle_time_ms": 100,
             "required_quality": "valid",
         }
+        broker_types = {
+            "Vehicle.Body.Lights.Brake.IsActive": "string",
+            "Vehicle.OBD.OilTemperature": "float",
+        }
+        mapping["datatype"] = broker_types.get(signal["apiName"], mapping["datatype"])
         if signal["datatype"] == "uint8":
             mapping.update({"min": 0, "max": 100, "unit": "percent"})
         if signal_type not in {"sensor", "actuator"}:
@@ -50,7 +59,7 @@ def gateway_provider_documents(root):
         {
             "signal_id": len(signals) + 1,
             "vss_path": "Vehicle.Speed",
-            "datatype": "double",
+            "datatype": "float",
             "service": "VehicleDynamicsService",
             "instance": "network_rx",
             "member": "speed",

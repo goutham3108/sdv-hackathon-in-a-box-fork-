@@ -57,6 +57,9 @@ common:aarch64-linux --extra_toolchains=@score_gcc_aarch64_toolchain//:all
 common:aarch64-linux --cpu=aarch64
 common:aarch64-linux --repo_env=TARGET_ARCH=aarch64
 
+# Keep legacy host C dependencies on GNU C11 without passing a C-only flag to C++.
+common:sdv-demo --host_per_file_copt=.*[.]c$@-std=gnu11
+
 common:x86_64-qnx --config=_toolchain_common
 common:x86_64-qnx --platforms=@score_bazel_platforms//:x86_64-qnx-sdp_8.0.0-posix
 common:x86_64-qnx --extra_toolchains=@score_qcc_x86_64_toolchain//:all

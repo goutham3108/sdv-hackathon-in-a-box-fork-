@@ -1,0 +1,36 @@
+{
+    "appId": "App1",
+    "appDesc": "Application One Description",
+    "logLevel": "kError",
+    "logMode": "kRemote",
+    "overwriteOnFull": "true",
+    "contextConfigs":[
+        {
+            "name": "DTC",
+            "logLevel": "kInfo"
+        },
+        {
+            "name": "FOO",
+            "logLevel": "kWarning"
+        },
+        {
+            "name": "vcip",
+            "logLevel": "kDebug"
+        },
+        []
+    ],
+    "logFilePath": "/var/tmp",
+    "mac_configuration": [
+        {
+            "variant": "base",
+            "config": {}
+        },
+        {
+            "variant": "qnx",
+            "config": {
+                "policy_path": "/proc/boot/secpol.bin",
+                "application_type": "App1_t"
+            }
+        }
+    ]
+}

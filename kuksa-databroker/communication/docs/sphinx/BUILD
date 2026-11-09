@@ -1,0 +1,100 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_python//sphinxdocs:sphinx_docs_library.bzl", "sphinx_docs_library")
+load(
+    "@score_tooling//bazel/rules/rules_score:rules_score.bzl",
+    "filter_execpath",
+    "sphinx_module",
+)
+load("//bazel/rules:generate_quality_links.bzl", "generate_quality_links")
+load("//docs/sphinx/utils:defs.bzl", "generate_api_rst")
+
+# Capture the Doxygen XML output for Breathe
+sphinx_docs_library(
+    name = "doxygen_xml",
+    srcs = ["//score/mw/com/design/doxygen_build:generate_doxygen"],
+)
+
+# Expose version flyout assets so docs/sphinx/utils targets can reference them
+exports_files(
+    [
+        "_static/css/version_flyout.css",
+        "_static/js/version_flyout.js",
+    ],
+    visibility = ["//docs/sphinx/utils:__pkg__"],
+)
+
+# Static assets for Sphinx documentation
+filegroup(
+    name = "static_assets",
+    srcs = glob(["_static/**/*"]),
+)
+
+# Generate RST files from @api tagged items using custom Starlark rule
+generate_api_rst(
+    name = "generate_api_rst",
+    doxygen_xml = "//score/mw/com/design/doxygen_build:generate_doxygen",
+    output_dir = "generated",
+    project_name = "mw::com",
+)
+
+# Generate RST substitution definitions for quality report links.
+# Content depends on --define=DOCS_VERSION and --define=DOCS_BASE_URL.
+generate_quality_links(
+    name = "quality_links",
+    visibility = ["//visibility:private"],
+)
+
+filter_execpath(
+    name = "breathe_doxygen_xml",
+    filter_pattern = "doxygen_build/xml",
+    flag = "-Dbreathe_projects.doxygen_build",
+    target = "//docs/sphinx:doxygen_xml",
+)
+
+# Build Sphinx documentation
+sphinx_module(
+    name = "sphinx_doc",
+    testonly = True,
+    srcs =
+        [
+            "index.rst",
+            "lola.rst",
+            "message_passing.rst",
+            "quality_reports.rst",
+            ":doxygen_xml",
+            ":generate_api_rst",
+            ":quality_links",
+            ":static_assets",
+        ],
+    docs_library_deps = [
+        "//score/mw/com/dependability:mw_com_rst",
+        "//score/message_passing/dependability:dependable_element_message_passing_rst",
+        "//:contributing_md",
+        "//score/mw/com:readme_md",
+        "//score/mw/com/doc/tutorial:tutorial_rst",
+    ],
+    exec_compatible_with = ["@platforms//os:linux"],
+    extra_opts = [
+        "-Dbreathe_default_project=doxygen_build",
+        "-W",
+    ],
+    extra_opts_targets = [
+        # Pass location of Doxygen XML output to Breathe via -D option
+        ":breathe_doxygen_xml",
+    ],
+    index = "index.rst",
+    target_compatible_with = ["@platforms//os:linux"],
+    deps = [],
+)

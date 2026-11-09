@@ -1,0 +1,119 @@
+# Supported protocols in Kuksa Databroker
+
+This file contains an overview of the protocols supported by Kuksa Databroker.
+To be able to understand the differences between protocols it is required to understand the data handling in Kuksa Databroker. The Databroker use datapoints defined by the [COVESA VSS syntax](https://github.com/COVESA/vehicle_signal_specification), and handles them from three perspectives:
+
+Perspective        | Meaning | Set Supported | Get Supported | Subscribe Supported
+-------------------|---------|---------------|---------------|--------------------
+Current Value      | Current value of a property, for example current window position | Yes | Yes, latest value is stored but not persisted in Databroker | Yes
+Target Value       | Wanted value of a property, for example wanted window position   | Yes (for VSS actuator)| Yes, latest value is stored  but not persisted in Databroker | Yes
+Actuation Value    | Wanted value of a property, for example wanted window position   | Yes (for VSS actuator)| No, value is not stored in Databroker  | Yes
+
+*Target Value* and *Actuation Value* are quite similar. They both represent the wanted value of a property they are handled as separate "channels" in the Databroker.
+This means that if a someone provides a wanted value to Databroker using an Actuation method, only subscribers for Actuation will be notified.
+An API typically supports either *Target Value* or *Actuation Value*, not both!
+
+Use of the *Target Value*  perspective is deprecated!
+
+### mw::com provider publish forwarding
+
+The `databroker-mw-com` composition additionally forwards current-value
+updates for configured actuator and bidirectional mappings through its
+in-process provider. VAL v1 CLI `publish` therefore updates the readable
+current value and queues an outbound middleware command. Explicit targets
+remain supported; when both fields change in one update, the target wins.
+Only mappings accepting actuation participate; sensor-only publishes are
+not outbound commands.
+
+Received middleware state uses the broker's internal provider-feedback
+notification origin. It still updates current values and notifies clients,
+but is not re-sent by the command forwarder. Initial subscription snapshots
+are ignored. This prevents bidirectional feedback loops without a separate
+process or changes to the VAL wire protocol. Current-value reads confirm the
+broker value, not physical command completion. Repeated current publishes
+follow the entry's change policy (`Continuous` entries notify every publish).
+
+## Overview
+
+This is an overview of the APIs supported described using the perspectives above
+
+| Protocol                 | Current Value - Set | Current Value - Get | Current Value - Subscribe | Target Value - Set | Target Value - Get | Target Value - Subscribe | Actuation Value - Set | Actuation Value - Get | Actuation Value - Subscribe
+| ------------------------ |-----|-----|-----|-----|-----|-----|-----|-----|-----|
+| gRPC (kuksa.val.v2)                     | Yes | Yes | Yes | No  | No  | No  | Yes | No  | Yes
+| gRPC (kuksa.val.v1) *Deprecated!*       | Yes | Yes | Yes | Yes | Yes | Yes | No  | No  | No
+| gRPC (sdv.databroker.v1) legacy adapter | No | Yes | Yes | No | No | No | Yes | No | No
+| VISS v2                                 | No  | Yes | Yes | Yes | No  | No  | No  | No  | No
+
+In general it is possible to mix protocols in a deployment, as long as the difference concerning Target/Actuation values are observed.
+That means, if you want to manage the wanted value of a Datapoint in the system, you must decide if you should use protocols that support the *Target Value* perspective or protocols that support the *Actuation Value* perspective for those Datapoints.
+
+## `kuksa.val.v2` gRPC Protocol
+
+The `kuksa.val.v2` is the newest protocol supported by Kuksa Databroker, and the only protocol which may be further developed.
+It was created as the `kuksa.val.v1` protocol was not optimal from performance perspective.
+For  more information see the `kuksa.val.v2` [documentation](../proto/kuksa/val/v2/README.md).
+
+## `kuksa.val.v1` gRPC Protocol
+
+This is the predecessor to `kuksa.val.v2`.
+For  more information see the `kuksa.val.v1` [documentation](../proto/kuksa/val/v1/README.md).
+
+## Legacy Velocitas Compatibility
+
+`databroker-mw-com` also enables `sdv.databroker.v1.Broker` on the same gRPC
+address as VAL v1/v2. Other server entrypoints must explicitly enable
+`grpc::server::Api::SdvDatabrokerV1`. No additional Python client package or
+second broker process is required.
+
+- `GetDatapoints` reads current values and returns legacy failure values for
+	unknown paths, unavailable values, or denied access.
+- `SetDatapoints` sends actuator requests through the broker's registered
+	actuation provider, including the in-process SCORE provider. It does not
+	publish current values or store deprecated actuator targets. The reply's
+	per-path errors report rejected values or provider failures.
+- `GetMetadata` returns metadata for exact requested paths, or all entries
+	when the names list is empty.
+- `Subscribe` accepts `SELECT Vehicle.Path[, Vehicle.OtherPath...]` and emits
+	initial current values followed by changes. Expressions, wildcards, aliases,
+	and `WHERE` conditions are rejected with `INVALID_ARGUMENT`, not ignored.
+
+All methods use the existing authorization interceptor and broker permissions.
+The legacy Collector service is not implemented.
+
+Rebuild and replace the guest's `databroker-mw-com` executable to activate this
+service; updating the Python application's import path alone is insufficient.
+Keep the existing provider and SCORE configurations. The requested VSS path
+must be present in the active provider configuration, and an actuator mapping
+must have an available actuation provider. A successful write acknowledges
+dispatch, not physical completion: current-value reads change only after the
+provider reports feedback.
+
+
+### VISS v2
+
+KUKSA databroker aims to provide a standards compliant implementation of [VISS](https://github.com/COVESA/vehicle-information-service-specification) v2 (using the websocket transport).
+
+It supports authorization using the access token format specified in [authorization.md](authorization.md).
+
+VISSv2 support in databroker is included by building it with the `viss` feature flag.
+
+```shell
+$ cargo build --features viss
+```
+
+The `enable-viss` flag must be provided at startup in order to enable the VISSv2 websocket interface.
+
+```shell
+$ databroker --enable-viss
+```
+
+The arguments `--viss-address` and `--viss-port` can be used if you want to use a different address or port than default for VISS.
+If not specified, the address `127.0.0.1` will be used unless otherwise specified with `--address`, and the port 8090 will be used.
+
+Using kuksa-client, the VISSv2 interface of databroker is available using the `ws` protocol in the uri, i.e.:
+
+```shell
+$ kuksa-client ws://127.0.0.1:8090
+```
+
+TLS is currently not supported.

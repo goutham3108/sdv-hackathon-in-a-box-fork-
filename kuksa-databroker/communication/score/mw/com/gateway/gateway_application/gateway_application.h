@@ -1,0 +1,116 @@
+/********************************************************************************
+ * Copyright (c) 2026 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ *******************************************************************************/
+#ifndef SCORE_MW_COM_GATEWAY_GATEWAY_APPLICATION_GATEWAY_APPLICATION_H
+#define SCORE_MW_COM_GATEWAY_GATEWAY_APPLICATION_GATEWAY_APPLICATION_H
+
+#include "score/language/safecpp/scoped_function/move_only_scoped_function.h"
+#include "score/language/safecpp/scoped_function/scope.h"
+#include "score/mw/com/gateway/gateway_application/configuration/gateway_configuration.h"
+#include "score/mw/com/gateway/gateway_application/gateway_core.h"
+#include "score/mw/com/gateway/transport_layer/transport.h"
+#include "score/mw/com/types.h"
+
+#include <memory>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+namespace score::mw::com::gateway
+{
+
+class GatewayApplication : public GatewayCore
+{
+  public:
+    explicit GatewayApplication(GatewayConfiguration&& app_configuration) noexcept
+        : app_configuration_{std::move(app_configuration)}
+    {
+    }
+
+    /// \brief Constructor for testing — injects a pre-built transport, skipping TransportFactory::Create in Setup().
+    explicit GatewayApplication(GatewayConfiguration&& app_configuration, std::unique_ptr<Transport> transport) noexcept
+        : app_configuration_{std::move(app_configuration)}, transport_layer_{std::move(transport)}
+    {
+    }
+
+    ~GatewayApplication() override;
+
+    score::Result<void> Setup();
+
+    score::Result<void> Start();
+
+    score::Result<void> ProvideService(score::mw::com::InstanceSpecifier service_instance_specifier,
+                                       std::vector<score::mw::com::EventInfo> service_elements) override;
+    void StopOfferService(score::mw::com::InstanceSpecifier service_instance_specifier) override;
+    score::Result<void> OfferService(score::mw::com::InstanceSpecifier service_instance_specifier) override;
+    score::Result<void> RegisterUpdateNotification(score::mw::com::InstanceSpecifier service_instance_specifier,
+                                                   impl::ServiceElementType element_type,
+                                                   std::string element_name) override;
+    score::Result<void> UnregisterUpdateNotification(score::mw::com::InstanceSpecifier service_instance_specifier,
+                                                     impl::ServiceElementType element_type,
+                                                     std::string element_name) override;
+    score::Result<void> NotifyUpdate(score::mw::com::InstanceSpecifier service_instance_specifier,
+                                     impl::ServiceElementType updated_element_type,
+                                     std::string updated_element_name) override;
+
+  private:
+    using FindCallbackScopedCb =
+        safecpp::MoveOnlyScopedFunction<void(score::mw::com::ServiceHandleContainer<score::mw::com::HandleType>,
+                                             score::mw::com::FindServiceHandle)>;
+
+    GatewayConfiguration app_configuration_;
+    std::unique_ptr<Transport> transport_layer_;
+
+    std::recursive_mutex mutex_;
+    std::unordered_map<std::string, score::mw::com::GenericProxy> proxies_;
+    std::unordered_map<std::string, score::mw::com::GenericSkeleton> skeletons_;
+    std::vector<score::mw::com::FindServiceHandle> find_handles_;
+    std::unordered_map<std::string, std::unordered_set<std::string>> active_event_subscriptions_;
+
+    /// \brief Starts asynchronous service discovery for all forwarded services.
+    /// \details Uses StartFindService to continuously monitor for services.
+    /// When a service appears, automatically creates a GenericProxy and propagates it via transport.
+    score::Result<void> StartServiceDiscovery();
+
+    /// \brief Checks if the service instance of the given specifier is accepted to be propagated by this gateway
+    /// application based on the configuration.
+    /// \return true if the service instance is accepted, false otherwise.
+    bool IsServiceInstanceAccepted(std::string_view service_instance_str) const;
+
+    void OnServiceAvailabilityChanged(const std::string& specifier_str,
+                                      std::vector<score::mw::com::HandleType> handles);
+    void OnServiceUnavailable(const std::string& specifier_str);
+    void PropagateService(const std::string& specifier_str);
+
+    void RegisterEventReceiveHandlerCallback(score::mw::com::GenericSkeleton& skeleton,
+                                             const std::string& specifier_str,
+                                             const std::string& event_name);
+    void OnSubscriptionStateChanged(const std::string& specifier_str,
+                                    const std::string& event_name,
+                                    bool has_subscribers);
+    void ReRegisterActiveEventSubscriptions(const std::string& specifier_str);
+
+    // Test-only: grant unit-test fixtures access to private members and methods.
+    friend class GatewayApplicationSubscriptionTest;
+    friend class GatewayApplicationRegisterCallbackTest;
+    friend class GatewayApplicationFlowTest;
+
+    // Intentionally putting the scope as the last member, so that it gets destroyed first and thus all callbacks get
+    // invalidated before any other member gets destroyed.
+    safecpp::Scope<> scope_;
+};
+
+}  // namespace score::mw::com::gateway
+
+#endif  // SCORE_MW_COM_GATEWAY_GATEWAY_APPLICATION_GATEWAY_APPLICATION_H

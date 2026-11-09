@@ -1,0 +1,129 @@
+# *******************************************************************************
+# Copyright (c) 2024 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Workflow configuration for S-CORE CI - Bazel Build & Test module
+# This workflow runs Bazel build and test when triggered by specific pull request events.
+
+name: Build & Test module (with host toolchain)
+on:
+  workflow_call:
+jobs:
+  build_and_test_host:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - bazel_args: ""
+            targets: "//..."
+            name: "default"
+          - bazel_args: "--features=asan --features=lsan --features=ubsan_clang"
+            targets: "//score/... //tests/..."
+            name: "with ASAN, LSAN, UBSAN"
+          - bazel_args: "--features=tsan"
+            targets: "//score/... //tests/..."
+            name: "with TSAN"
+    name: Bazel test ${{ matrix.name }}
+    steps:
+      - uses: eclipse-score/more-disk-space@v1
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Create Bazel output base directory
+        run: |
+          sudo mkdir -p /mnt/.bazel
+          sudo chown -R $USER:$USER /mnt/.bazel
+      - name: Create config indicator file
+        run: echo "host" > .bazel_config
+      - name: Setup Bazel
+        uses: eclipse-score/cicd-actions/setup-bazel-cache@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+        with:
+          unique-cache-name: ${{ github.job }}
+      - name: Allow linux-sandbox
+        uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+      - name: Bazel build targets
+        run: |
+          bazel build //...
+      - name: Bazel test targets
+        run: |
+          bazel test ${{ matrix.targets }} --build_tests_only \
+            ${{ matrix.bazel_args }}
+
+  build_and_int_qemu_test_host:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - bazel_args: ""
+            name: "default"
+          - bazel_args: "--features=asan --features=lsan --features=ubsan_clang"
+            name: "with ASAN, LSAN, UBSAN"
+          - bazel_args: "--features=tsan"
+            name: "with TSAN"
+    name: Integration tests ${{ matrix.name }}
+    steps:
+      - uses: eclipse-score/more-disk-space@v1
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Create Bazel output base directory
+        run: |
+          sudo mkdir -p /mnt/.bazel
+          sudo chown -R $USER:$USER /mnt/.bazel
+      - name: Create config indicator file
+        run: echo "host" > .bazel_config
+      - name: Setup Bazel
+        uses: eclipse-score/cicd-actions/setup-bazel-cache@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+        with:
+          unique-cache-name: ${{ github.job }}
+      - name: Install tools needed for ITF tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-x86 iputils-ping tcpdump cloud-image-utils
+      - name: Allow linux-sandbox
+        uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+      - run: df -h
+      - name: Enable KVM group permissons
+        run: |
+          sudo chmod 666 /dev/kvm
+      - name: Run Linux QEMU integration tests
+        run: |
+          bazel test --config=qemu-integration ${{ matrix.bazel_args }} //quality/... //tests/integration_test/...
+      - run: df -h
+        if: always()
+
+  build_and_perf_test_host:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: eclipse-score/more-disk-space@v1
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Create Bazel output base directory
+        run: |
+          sudo mkdir -p /mnt/.bazel
+          sudo chown -R $USER:$USER /mnt/.bazel
+      - name: Create config indicator file
+        run: echo "host" > .bazel_config
+      - name: Setup Bazel
+        uses: eclipse-score/cicd-actions/setup-bazel-cache@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+        with:
+          unique-cache-name: ${{ github.job }}
+      - name: Allow linux-sandbox
+        uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+      - name: Allow perf
+        run: sudo sh -c 'echo -1 > /proc/sys/kernel/perf_event_paranoid'
+      - name: Run Linux perf tests
+        run: |
+          bazel test --config=perf-tests //tests/benchmarks/... --build_tests_only
+      - name: Run Linux perf tests (flamegraphs)
+        run: |
+          bazel test --config=perf-tests-flamegraphs //tests/benchmarks/... --build_tests_only

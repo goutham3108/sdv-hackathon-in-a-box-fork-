@@ -1,0 +1,116 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include <gtest/gtest.h>
+
+#include "score/message_passing/i_server_connection.h"
+#include "score/message_passing/i_shared_resource_engine.h"
+#include "score/message_passing/unix_domain/unix_domain_engine.h"
+#include "score/message_passing/unix_domain/unix_domain_server.h"
+#include "score/message_passing/unix_domain/unix_domain_server_factory.h"
+#include "score/message_passing/unix_domain/unix_domain_socket_address.h"
+
+#include <type_traits>
+
+namespace score::message_passing
+{
+namespace
+{
+
+using namespace ::testing;
+
+using GetOsResourcesPointer = decltype(&UnixDomainEngine::GetOsResources);
+using GetLoggerInterfacePointer = decltype(&ISharedResourceEngine::GetLogger);
+using GetLoggerPointer = decltype(&UnixDomainEngine::GetLogger);
+using GetClientIdentityInterfacePointer = decltype(&IServerConnection::GetClientIdentity);
+using GetClientIdentityPointer = decltype(&detail::UnixDomainServer::ServerConnection::GetClientIdentity);
+using SocketAddressDataPointer = decltype(&detail::UnixDomainSocketAddress::data);
+
+static_assert(std::is_invocable_v<GetOsResourcesPointer, UnixDomainEngine&>);
+static_assert(!std::is_invocable_v<GetOsResourcesPointer, UnixDomainEngine&&>);
+static_assert(std::is_invocable_v<GetLoggerInterfacePointer, ISharedResourceEngine&>);
+static_assert(!std::is_invocable_v<GetLoggerInterfacePointer, ISharedResourceEngine&&>);
+static_assert(std::is_invocable_v<GetLoggerPointer, UnixDomainEngine&>);
+static_assert(!std::is_invocable_v<GetLoggerPointer, UnixDomainEngine&&>);
+static_assert(std::is_invocable_v<GetClientIdentityInterfacePointer, const IServerConnection&>);
+static_assert(!std::is_invocable_v<GetClientIdentityInterfacePointer, const IServerConnection&&>);
+static_assert(std::is_invocable_v<GetClientIdentityPointer, const detail::UnixDomainServer::ServerConnection&>);
+static_assert(!std::is_invocable_v<GetClientIdentityPointer, const detail::UnixDomainServer::ServerConnection&&>);
+static_assert(std::is_invocable_v<SocketAddressDataPointer, const detail::UnixDomainSocketAddress&>);
+static_assert(!std::is_invocable_v<SocketAddressDataPointer, const detail::UnixDomainSocketAddress&&>);
+
+TEST(UnixDomainServerTest, NonRunningServers)
+{
+    UnixDomainServerFactory factory{};
+    {
+        IServerFactory::ServerConfig server_config{};
+        ServiceProtocolConfig protocol_config{};
+        auto server = factory.Create(protocol_config, server_config);
+        EXPECT_TRUE(server);
+    }
+    {
+        IServerFactory::ServerConfig server_config{};
+        ServiceProtocolConfig protocol_config{};
+        auto server = factory.Create(protocol_config, server_config);
+        EXPECT_TRUE(server);
+        server->StopListening();
+    }
+}
+
+TEST(UnixDomainServerTest, RunningServersWithNoConnections)
+{
+    UnixDomainServerFactory factory{};
+    IServerFactory::ServerConfig server_config{};
+    std::string test_prefix{"test_prefix_"};
+    test_prefix += std::to_string(::getpid()) + "_";
+    std::string id1{test_prefix + "1"};
+    std::string id2{test_prefix + "2"};
+
+    ServiceProtocolConfig protocol_config1{id1, 0, 0, 0};
+    ServiceProtocolConfig protocol_config2{id2, 0, 0, 0};
+    auto server1 = factory.Create(protocol_config1, server_config);
+    auto server2 = factory.Create(protocol_config2, server_config);
+    EXPECT_TRUE(server1);
+    EXPECT_TRUE(server2);
+    auto connect_callback = [](IServerConnection&) {
+        return score::cpp::make_unexpected(score::os::Error::createUnspecifiedError());
+    };
+    EXPECT_TRUE(server1->StartListening(connect_callback).has_value());
+    EXPECT_TRUE(server2->StartListening(connect_callback).has_value());
+    server2->StopListening();
+}
+
+#ifndef __QNX__  // for some reason, QNX allows both instances to listen
+TEST(UnixDomainServerTest, RunningServersWithSameId)
+{
+    UnixDomainServerFactory factory{};
+    IServerFactory::ServerConfig server_config{};
+    std::string test_prefix{"test_prefix_"};
+    test_prefix += std::to_string(::getpid()) + "_";
+    std::string id1{test_prefix + "1"};
+
+    ServiceProtocolConfig protocol_config1{id1, 0, 0, 0};
+    ServiceProtocolConfig protocol_config2{id1, 0, 0, 0};
+    auto server1 = factory.Create(protocol_config1, server_config);
+    auto server2 = factory.Create(protocol_config2, server_config);
+    EXPECT_TRUE(server1);
+    EXPECT_TRUE(server2);
+    auto connect_callback = [](IServerConnection&) {
+        return score::cpp::make_unexpected(score::os::Error::createUnspecifiedError());
+    };
+    EXPECT_TRUE(server1->StartListening(connect_callback).has_value());
+    EXPECT_FALSE(server2->StartListening(connect_callback).has_value());
+}
+#endif
+
+}  // namespace
+}  // namespace score::message_passing

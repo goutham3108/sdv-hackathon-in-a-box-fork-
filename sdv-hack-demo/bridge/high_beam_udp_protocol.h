@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Local copy for bridge package
 
 #ifndef C4AC2422_7664_4FE6_AF5B_5170B82C47CF

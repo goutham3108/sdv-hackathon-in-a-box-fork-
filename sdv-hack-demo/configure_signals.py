@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Synchronize body signal configuration without replacing unrelated services."""
 
 import argparse

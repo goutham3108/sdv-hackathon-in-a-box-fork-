@@ -1,0 +1,37 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_python//python:defs.bzl", "py_binary")
+
+exports_files(
+    ["config_generator_rule.bzl"],
+    visibility = ["//visibility:public"],
+)
+
+py_binary(
+    name = "config_generator",
+    srcs = [
+        "__init__.py",
+        "config_generator.py",
+    ],
+    exec_compatible_with = ["@platforms//os:linux"],
+    main = "config_generator.py",
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = [
+        "//platform/aas/performance/tests/tools/artificial_load:__subpackages__",
+        "//score/mw/com/performance_benchmarks/macro_benchmark:__subpackages__",
+    ],
+    deps = [
+        "//third_party/jsonschema",
+    ],
+)

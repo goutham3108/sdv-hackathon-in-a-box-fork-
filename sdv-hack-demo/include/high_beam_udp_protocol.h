@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Local copy of the UDP protocol header so sdv-hack-demo is self-contained.
 
 #ifndef C42E85F8_45AA_47BE_A289_0F27530B0FE5

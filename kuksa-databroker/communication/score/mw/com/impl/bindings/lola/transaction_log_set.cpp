@@ -1,0 +1,278 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/transaction_log_set.h"
+
+#include "score/language/safecpp/safe_math/safe_math.h"
+#include "score/mw/com/impl/bindings/lola/transaction_log_registration_guard.h"
+#include "score/mw/com/impl/com_error.h"
+#include "score/mw/log/logging.h"
+#include "score/result/result.h"
+
+#include <score/assert.hpp>
+
+#include <limits>
+#include <mutex>
+
+namespace score::mw::com::impl::lola
+{
+
+bool TransactionLogSet::TransactionLogNode::TryAcquire(TransactionLogId transaction_log_id)
+{
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(transaction_log_id != kInvalidTransactionLogId,
+                                                "Called TransactionLogNode::TryAcquire with kInvalidTransactionLogId");
+    TransactionLogId expected_transaction_log_id{kInvalidTransactionLogId};
+    return transaction_log_id_.GetUnderlying().compare_exchange_strong(expected_transaction_log_id, transaction_log_id);
+}
+
+bool TransactionLogSet::TransactionLogNode::TryAcquireForRead(TransactionLogId transaction_log_id)
+{
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        transaction_log_id != kInvalidTransactionLogId,
+        "Called TransactionLogNode::TryAcquireForRead with kInvalidTransactionLogId");
+    return (transaction_log_id_ == transaction_log_id);
+}
+
+void TransactionLogSet::TransactionLogNode::Reset()
+{
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        !GetTransactionLogLocalView().ContainsTransactions(),
+        "Cannot Reset TransactionLog as it still contains some old transactions.");
+    needs_rollback_.GetUnderlying() = false;
+    Release();
+}
+
+TransactionLogSet::TransactionLogSet(const TransactionLogIndex max_number_of_logs,
+                                     const std::size_t number_of_slots,
+                                     memory::shared::ManagedMemoryResource& resource)
+    : proxy_transaction_logs_(max_number_of_logs, TransactionLogNode{number_of_slots, resource}, resource),
+      skeleton_tracing_transaction_log_{number_of_slots, resource}
+{
+    SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD_MESSAGE(
+        safe_math::CmpNotEqual(max_number_of_logs, kSkeletonIndexSentinel),
+        "kSkeletonIndexSentinel is a reserved sentinel value so the max_number_of_logs must be reduced.");
+}
+
+void TransactionLogSet::MarkTransactionLogsNeedRollback(const TransactionLogId& transaction_log_id)
+{
+    for (auto& transaction_log_node : proxy_transaction_logs_)
+    {
+        const bool log_is_active = transaction_log_node.IsActive();
+        // autosar_cpp14_a5_3_2_violation
+        // the begin or end iterators of this range based for loop, can only be a nullpointer if proxy_transaction_logs_
+        // is zero length DynamicArray. In which case BOTH begin and end will return a nullpointer and the loop
+        // condition will fail before ever entering the loop. Thus derefferencing a nullpointer is impossible here.
+        // coverity[autosar_cpp14_a5_3_2_violation : FALSE]
+        const bool has_matching_id = (transaction_log_node.GetTransactionLogId() == transaction_log_id);
+        if (log_is_active && has_matching_id)
+        {
+            transaction_log_node.MarkNeedsRollback(true);
+        }
+    }
+}
+
+Result<void> TransactionLogSet::RollbackProxyTransactions(
+    const TransactionLogId& transaction_log_id,
+    const TransactionLogLocalView::DereferenceSlotCallback dereference_slot_callback,
+    const TransactionLogLocalView::DereferenceSlotCallback unsubscribe_callback)
+{
+    const auto transaction_log_node_iterators_to_be_rolled_back =
+        FindTransactionLogNodesToBeRolledBack(transaction_log_id);
+
+    // Keep trying to rollback a TransactionLog. If a rollback succeeds, return. If a rollback fails, try to rollback
+    // the next TransactionLog. If there are only TransactionLogs remaining which cannot be rolled back, return an
+    // error.
+    Result<void> rollback_result{};
+    for (auto* const transaction_log_node_it : transaction_log_node_iterators_to_be_rolled_back)
+    {
+        rollback_result = transaction_log_node_it->GetTransactionLogLocalView().RollbackProxyElementLog(
+            dereference_slot_callback, unsubscribe_callback);
+        if (rollback_result.has_value())
+        {
+            transaction_log_node_it->Reset();
+            return {};
+        }
+    }
+    return rollback_result;
+}
+
+Result<void> TransactionLogSet::RollbackSkeletonTracingTransactions(
+    const TransactionLogLocalView::DereferenceSlotCallback dereference_slot_callback)
+{
+    if (!skeleton_tracing_transaction_log_.IsActive())
+    {
+        return {};
+    }
+    const auto rollback_result =
+        skeleton_tracing_transaction_log_.GetTransactionLogLocalView().RollbackSkeletonTracingElementLog(
+            dereference_slot_callback);
+    if (!rollback_result.has_value())
+    {
+        return rollback_result;
+    }
+    skeleton_tracing_transaction_log_.Reset();
+    return {};
+}
+
+score::Result<TransactionLogRegistrationGuard> TransactionLogSet::RegisterProxyElement(
+    const TransactionLogId& transaction_log_id,
+    ConsumerEventDataControlLocalView<>& consumer_event_data_control_local_view)
+{
+    const auto next_available_slot_result = AcquireNextAvailableSlot(transaction_log_id);
+    if (!next_available_slot_result.has_value())
+    {
+        return MakeUnexpected(
+            ComErrc::kMaxSubscribersExceeded,
+            "Could not register with TransactionLogId as there are no available slots in the "
+            "TransactionLogSet. This is likely because the number of subscribers has exceeded the configuration "
+            "value of max_subscribers.");
+    }
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        !next_available_slot_result.value().first->GetTransactionLogLocalView().ContainsTransactions(),
+        "Cannot reuse TransactionLog as it still contains some old transactions.");
+    return TransactionLogRegistrationGuard{
+        *this, next_available_slot_result.value().second, consumer_event_data_control_local_view};
+}
+
+TransactionLogRegistrationGuard TransactionLogSet::RegisterSkeletonTransactionLog(
+    ConsumerEventDataControlLocalView<>& consumer_event_data_control_local_view)
+{
+    // we only do have one skeleton instance accessing the skeleton transaction log, so a dummy value is good enough,
+    // we don't need e.g. an uid here.
+    constexpr TransactionLogId kDummyTransactionLogIdSkeleton{1};
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(!skeleton_tracing_transaction_log_.IsActive(),
+                                                "Can only register a single Skeleton Tracing element.");
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        skeleton_tracing_transaction_log_.TryAcquire(kDummyTransactionLogIdSkeleton),
+        "Unexpected failure to acquire TransactionLogNode for SkeletonEvent!");
+    return TransactionLogRegistrationGuard{*this, kSkeletonIndexSentinel, consumer_event_data_control_local_view};
+}
+
+void TransactionLogSet::Unregister(const TransactionLogIndex transaction_log_index)
+{
+    if (IsSkeletonElementTransactionLogIndex(transaction_log_index))
+    {
+        skeleton_tracing_transaction_log_.Reset();
+    }
+    else
+    {
+        SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD(static_cast<std::size_t>(transaction_log_index) <
+                                            proxy_transaction_logs_.size());
+        proxy_transaction_logs_.at(static_cast<std::size_t>(transaction_log_index)).Reset();
+    }
+}
+
+TransactionLog& TransactionLogSet::GetTransactionLog(const TransactionLogIndex transaction_log_index)
+{
+    if (IsSkeletonElementTransactionLogIndex(transaction_log_index))
+    {
+        SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD_MESSAGE(
+            skeleton_tracing_transaction_log_.IsActive(),
+            "Skeleton tracing transaction log must be registered before being retrieved.");
+        return skeleton_tracing_transaction_log_.GetTransactionLog();
+    }
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD(static_cast<std::size_t>(transaction_log_index) <
+                                        proxy_transaction_logs_.size());
+    SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD_MESSAGE(
+        proxy_transaction_logs_.at(static_cast<std::size_t>(transaction_log_index)).IsActive(),
+        "Proxy tracing transaction log must be registered before being retrieved.");
+    return proxy_transaction_logs_.at(static_cast<std::size_t>(transaction_log_index)).GetTransactionLog();
+}
+
+std::vector<TransactionLogSet::TransactionLogCollection::iterator>
+TransactionLogSet::FindTransactionLogNodesToBeRolledBack(const TransactionLogId& target_transaction_log_id)
+{
+    std::vector<TransactionLogSet::TransactionLogCollection::iterator> found_node_iterators{};
+
+    // LCOV_EXCL_BR_START (Tool incorrectly marks the branch as "Decision couldn't be analyzed" despite all lines within
+    // the for loop being covered. We also have a test in case proxy_transaction_logs_.size() == 0. Suppression can be
+    // removed when bug is fixed in Ticket-188259).
+    // autosar_cpp14_m5_0_15_violation
+    // This rule has an explicit exception for using ++/-- operators on iterators, which is what is happening here.
+    //
+    // autosar_cpp14_a5_3_2_violation
+    // `it` can only be a nullpointer if proxy_transaction_logs_ is zero length DynamicArray. In which case both begin
+    // and end will return a nullpointer and the loop condition will fail before ever entering the loop. Thus
+    // derefferencing a nullpointer is impossible here.
+    //
+    // coverity[autosar_cpp14_m5_0_15_violation]
+    // coverity[autosar_cpp14_a5_3_2_violation : FALSE]
+    for (auto* it = proxy_transaction_logs_.begin(); it != proxy_transaction_logs_.end(); it++)
+    {
+        // LCOV_EXCL_BR_STOP
+        // coverity[autosar_cpp14_a5_3_2_violation : FALSE]
+        const bool acquired = it->TryAcquireForRead(target_transaction_log_id);
+        if (acquired)
+        {
+            if (it->NeedsRollback())
+            {
+                found_node_iterators.push_back(it);
+            }
+        }
+    }
+    return found_node_iterators;
+}
+
+std::optional<std::pair<TransactionLogSet::TransactionLogCollection::iterator, TransactionLogIndex>>
+TransactionLogSet::AcquireNextAvailableSlot(TransactionLogId transaction_log_id)
+{
+    //  The size of the transaction logs reflects the size of max subscribers and therefore the potential upper-bound
+    //  of concurrent proxies accessing these transaction_logs, from which we deduce our max retry count!
+    const auto max_retry_count{proxy_transaction_logs_.size()};
+    std::size_t retries{0U};
+    while (retries < max_retry_count)
+    {
+        // we iterate using iterators as it minimizes bounds-checking to start/end!
+        TransactionLogIndex index{0U};
+
+        // LCOV_EXCL_BR_START (Tool incorrectly marks the branch as "Decision couldn't be analyzed" despite all lines
+        // within the for loop being covered. The case in which proxy_transaction_logs_.size() == 0 will never be
+        // reached since the containing while loop is only entered when the size() > 0. Suppression can be removed when
+        // bug is fixed in Ticket-188259).
+        // autosar_cpp14_m5_0_15_violation
+        // This rule has an explicit exception for using ++/-- operators on iterators, which is what is happening here.
+        //
+        // autosar_cpp14_a5_3_2_violation
+        // it can only be a nullpointer if proxy_transaction_logs_ is zero length DynamicArray. In which case both begin
+        // and end will return a nullpointer and the loop condition will fail before ever entering the loop. Thus
+        // derefferencing a nullpointer is impossible here.
+        //
+        // coverity[autosar_cpp14_m5_0_15_violation]
+        // coverity[autosar_cpp14_a5_3_2_violation : FALSE]
+        for (auto* it = proxy_transaction_logs_.begin(); it != proxy_transaction_logs_.end(); it++)
+        {
+            // LCOV_EXCL_BR_STOP
+            auto& transaction_log_node = *it;
+            const auto acquired = transaction_log_node.TryAcquire(transaction_log_id);
+            if (acquired)
+            {
+                // coverity[autosar_cpp14_a5_3_2_violation]
+                transaction_log_node.MarkNeedsRollback(false);
+                // Suppress "AUTOSAR C++14 M6-5-3" rule finding: "The loop-counter shall not be modified within
+                // condition or statement.".
+                // This is false-positive, the loop-counter is not changed.
+                // coverity[autosar_cpp14_m6_5_3_violation : FALSE]
+                return std::make_pair(it, index);
+            }
+            index++;
+        }
+        retries++;
+    }
+    return {};
+}
+
+bool TransactionLogSet::IsSkeletonElementTransactionLogIndex(const TransactionLogIndex transaction_log_index)
+{
+    return safe_math::CmpEqual(transaction_log_index, TransactionLogSet::kSkeletonIndexSentinel);
+}
+
+}  // namespace score::mw::com::impl::lola

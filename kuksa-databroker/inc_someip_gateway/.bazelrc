@@ -1,0 +1,162 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# In order to overcome stability issues in GitHub
+common --experimental_repository_downloader_retries=10
+common --experimental_scale_timeouts=2.0
+common --http_connector_attempts=10
+common --http_connector_retry_max_timeout=1s
+common --http_timeout_scaling=2.0
+
+# Java Language Configuration
+build --java_language_version=17
+build --tool_java_language_version=17
+build --java_runtime_version=remotejdk_17
+build --tool_java_runtime_version=remotejdk_17
+
+# ============================================================================
+# Multi-Architecture Build Configuration
+# ============================================================================
+# These configs enable building for different target architectures.
+#
+# Usage:
+#   bazel build //... --config=x86_64-linux  # Build for x86_64 (native on x86_64 host)
+#   bazel build //... --config=aarch64-linux # Build for aarch64 (cross-compile)
+#   bazel build //... --config=x86_64-qnx    # Build for x86_64 (native on x86_64 QNX8)
+#   bazel build //... --config=aarch64-qnx   # Build for aarch64 (cross-compile QNX8)
+#
+# Platform Definitions:
+#   @score_bazel_platforms//:x86_64-linux  - x86_64 architecture (GNU/Linux)
+#   @score_bazel_platforms//:aarch64-linux - aarch64 architecture (GNU/Linux)
+#   @score_bazel_platforms//:x86_64-qnx    - x86_64 architecture (QNX8)
+#   @score_bazel_platforms//:aarch64-qnx   - aarch64 architecture (QNX8)
+
+common --extra_toolchains=@score_linux_x86_64_ext4_toolchain//:ext4-x86_64-linux
+common:_toolchain_common --host_platform=@score_bazel_platforms//:x86_64-linux
+common:_toolchain_common --extra_toolchains=@score_gcc_x86_64_toolchain//:all
+
+
+common:x86_64-linux --config=_toolchain_common
+common:x86_64-linux --platforms=@score_bazel_platforms//:x86_64-linux
+common:x86_64-linux --extra_toolchains=@score_gcc_x86_64_toolchain//:all
+common:x86_64-linux --repo_env=TARGET_ARCH=x86_64
+
+common:aarch64-linux --config=_toolchain_common
+common:aarch64-linux --platforms=@score_bazel_platforms//:aarch64-linux-gcc_12.2.0-posix
+common:aarch64-linux --extra_toolchains=@score_gcc_aarch64_toolchain//:all
+common:aarch64-linux --cpu=aarch64
+common:aarch64-linux --repo_env=TARGET_ARCH=aarch64
+
+common:x86_64-qnx --config=_toolchain_common
+common:x86_64-qnx --platforms=@score_bazel_platforms//:x86_64-qnx-sdp_8.0.0-posix
+common:x86_64-qnx --extra_toolchains=@score_qcc_x86_64_toolchain//:all
+common:x86_64-qnx --extra_toolchains=@score_qnx_x86_64_ifs_toolchain//:all
+common:x86_64-qnx --repo_env=TARGET_ARCH=x86_64
+
+common:aarch64-qnx --config=_toolchain_common
+common:aarch64-qnx --platforms=@score_bazel_platforms//:aarch64-qnx-sdp_8.0.0-posix
+common:aarch64-qnx --extra_toolchains=@score_qcc_aarch64_toolchain//:all
+common:aarch64-qnx --extra_toolchains=@score_qnx_aarch64_ifs_toolchain//:all
+common:aarch64-qnx --repo_env=TARGET_ARCH=aarch64
+
+common --credential_helper=*.qnx.com=%workspace%/.github/tools/qnx_credential_helper.py
+
+# gRPC 1.70.1's BoringSSL dependency triggers this Clang 22 diagnostic on Linux.
+# Keep it scoped to KUKSA bridge targets rather than changing the global warning policy.
+build:kuksa --copt=-Wno-error=incompatible-pointer-types-discards-qualifiers
+build:kuksa --copt=-Wno-error=private-header
+
+# Force linux-sandbox to integration test execution only.
+# All integration tests have to have "integration_test" in their rule name,
+# otherwise they will be executed without sandboxing, which is not desired.
+# QEMU-based integration tests must run in linux-sandbox because they modify
+# network interfaces and IP configuration. Use this config for those runs:
+#   bazel test --config=qemu-integration //...
+test:qemu-integration --strategy_regexp='^Testing .*integration_test.*=linux-sandbox'
+test:qemu-integration --//quality/integration_testing/flags:linux_backend=qemu
+test:qemu-integration --run_under=@score_itf//scripts:run_under_qemu
+test:x86_64-qnx --strategy_regexp='^Testing .*integration_test.*=linux-sandbox'
+test:x86_64-qnx --run_under=@score_itf//scripts:run_under_qemu
+test:aarch64-qnx --strategy_regexp='^Testing .*integration_test.*=linux-sandbox'
+test:aarch64-qnx --run_under=@score_itf//scripts:run_under_qemu
+
+
+# ============================================================================
+# End-to-End Performance Test Configuration
+# ============================================================================
+# The performance test wrapper creates its own isolated network namespace and configures it
+# before the test starts.
+# Usage: bazel test --config=perf-tests //tests/benchmarks:e2e_benchmarks
+test:perf-tests --run_under=//tests/benchmarks:setup_network
+test:perf-tests --define=perf_tests=true
+test:perf-tests --compilation_mode=opt
+
+# Adds debug info and keeps frame pointers on top of an optimized build for profiling.
+# Records gateway daemon CPU samples and writes flamegraphs to the benchmark test outputs.
+# Requires perf; FlameGraph scripts are downloaded by Bazel.
+# Usage: bazel test --config=perf-tests-flamegraphs //tests/benchmarks:e2e_benchmarks
+test:perf-tests-flamegraphs --config=perf-tests
+test:perf-tests-flamegraphs --copt=-fno-omit-frame-pointer
+test:perf-tests-flamegraphs --copt=-g
+test:perf-tests-flamegraphs --strip=never
+test:perf-tests-flamegraphs --define=flamegraphs=true
+
+test --test_output=errors
+build --incompatible_strict_action_env
+
+common --registry=https://raw.githubusercontent.com/eclipse-score/bazel_registry/main/
+common --registry=https://bcr.bazel.build
+
+# ============================================================================
+# Feature Flags & S-CORE Configuration
+# ============================================================================
+common --features=-treat_warnings_as_errors
+common --features=external_include_paths
+
+# S-CORE Base Libraries and Communication Configuration
+common --@score_baselibs//score/json:base_library=nlohmann
+common --@score_baselibs//score/mw/log/flags:KRemote_Logging=False
+
+# unshare /dev/shm and /tmp, gateway_ipc_binding tests create files in there and concurrent test runs would influence each other
+test --sandbox_tmpfs_path=/dev/shm
+test --sandbox_tmpfs_path=/tmp
+
+# ============================================================================
+# TC8 SOME/IP Conformance Test Configuration
+# ============================================================================
+# ITF (QEMU) TC8 runs.
+# Usage: bazel test --config=tc8-itf //tests/tc8_conformance:test_tc8_<name>
+test:tc8-itf --config=qemu-integration
+test:tc8-itf --test_tag_filters=tc8
+test:tc8-itf --strategy_regexp='^Testing .*tc8_conformance.*=linux-sandbox'
+
+# QNX8 QEMU ITF TC8 runs.
+# common: (not build:/test:) prevents "expanded more than once" warning.
+# Usage: bazel test --config=tc8-itf-qnx //tests/tc8_conformance:test_tc8_<name>
+common:tc8-itf-qnx --config=x86_64-qnx
+# precompile must be force_disabled: "disabled" still causes a NoneType crash via QNX TARGET toolchain lookup.
+common:tc8-itf-qnx --@rules_python//python/config_settings:precompile=force_disabled
+test:tc8-itf-qnx --test_tag_filters=tc8
+test:tc8-itf-qnx --strategy_regexp='^Testing .*tc8_conformance.*=linux-sandbox'
+
+# Coverage settings
+import %workspace%/coverage.bazelrc
+
+# Clang-tidy and Ruff settings
+import %workspace%/static_analysis.bazelrc
+
+# Import custom user settings
+# Can be used to enable e.g. sanitizers or other features without modifying the main .bazelrc
+# For sanitizer/clang-tidy policy assets and sanitizer feature definitions see
+# https://github.com/eclipse-score/score_cpp_policies/
+try-import %workspace%/user.bazelrc

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Copy of the upstream SOME/IP bridge integration example.
 // Packaged here so the demo can be built and packaged entirely from sdv-hack-demo.
 

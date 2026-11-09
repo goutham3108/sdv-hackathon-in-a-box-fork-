@@ -1,0 +1,956 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
+load("@score_baselibs//score/flatbuffers/bazel:codegen.bzl", "generate_cpp")
+load("@score_baselibs//score/flatbuffers/bazel:tools.bzl", "generate_json_schema")
+load("//bazel/tools:json_schema_validator.bzl", "validate_json_schema_test")
+load("//quality/unit_testing:unit_testing.bzl", "cc_unit_test")
+load("//score/mw:common_features.bzl", "COMPILER_WARNING_FEATURES")
+
+exports_files(
+    [
+        "mw_com_config.fbs",
+        "mw_com_config_schema.json",
+    ],
+    visibility = ["//score/mw/com:__subpackages__"],
+)
+
+# mw_com_config.fbs is the single source of truth for the configuration schema.
+# The rich JSON schema (mw_com_config_schema.json) is generated from it; schema_drift_test
+# guards that they never diverge.
+#
+# generate_cpp compiles the .fbs to a C++ header via baselibs' flatc rule.
+generate_cpp(
+    name = "mw_com_config_fbs",
+    output = "mw_com_config_generated.h",
+    schema = "mw_com_config.fbs",
+    target_compatible_with = select({
+        "//score/mw/com/flags:flatbuffers_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    visibility = ["//score/mw/com/impl/configuration:__subpackages__"],
+)
+
+# Post-processed (but not yet hyphen-restored) rich JSON schema: baselibs' generate_json_schema
+# runs flatc --jsonschema and its schema_generator. generate_schema.py then only restores
+# the fbs "_" -> "-" mapping on this output to produce the checked-in mw_com_config_schema.json.
+generate_json_schema(
+    name = "mw_com_config_postproc_schema",
+    output = "mw_com_config.postproc.schema.json",
+    schema = "mw_com_config.fbs",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Regenerates mw_com_config_schema.json from mw_com_config.fbs.
+#   bazel run //score/mw/com/impl/configuration:generate_schema
+py_binary(
+    name = "generate_schema",
+    srcs = ["generate_schema.py"],
+    args = [
+        "--in",
+        "$(location :mw_com_config_postproc_schema)",
+        "--output",
+        "$(rootpath mw_com_config_schema.json)",
+    ],
+    data = [
+        "mw_com_config_schema.json",
+        ":mw_com_config_postproc_schema",
+    ],
+    main = "generate_schema.py",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Drift guard: hyphen-restoring the post-processed schema reproduces the checked-in schema.
+py_test(
+    name = "schema_drift_test",
+    srcs = [
+        "generate_schema.py",
+        "schema_drift_test.py",
+    ],
+    args = [
+        "--in",
+        "$(location :mw_com_config_postproc_schema)",
+    ],
+    data = [
+        "mw_com_config_schema.json",
+        ":mw_com_config_postproc_schema",
+    ],
+    main = "schema_drift_test.py",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+validate_json_schema_test(
+    name = "validate_mw_com_config_schema",
+    json = "example/mw_com_config.json",
+    schema = ":mw_com_config_schema",
+    tags = ["lint"],
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+filegroup(
+    name = "mw_com_config_schema",
+    srcs = ["mw_com_config_schema.json"],
+    visibility = [
+        "//score/mw/com:__subpackages__",
+        "//score/mw/com/impl/configuration/test:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "quality_type",
+    srcs = ["quality_type.cpp"],
+    hdrs = ["quality_type.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl:__subpackages__",
+    ],
+)
+
+# A common library for configuration validation and parsing. It shall be used by both strategies (JSON & Flatbuffers) parsers.
+cc_library(
+    name = "i_configuration_parsing_strategy",
+    srcs = ["i_configuration_parsing_strategy.cpp"],
+    hdrs = ["i_configuration_parsing_strategy.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/configuration:__subpackages__",
+    ],
+    deps = [
+        ":configuration_local",
+    ],
+)
+
+cc_library(
+    name = "configuration_json_parsing_strategy",
+    srcs = ["configuration_json_parsing_strategy.cpp"],
+    hdrs = ["configuration_json_parsing_strategy.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        ":config_validate",
+        ":lola_service_instance_deployment",
+        ":quality_type",
+        ":service_type_deployment",
+        ":someip_service_instance_deployment",
+        "@score_baselibs//score/mw/log",
+        "@score_baselibs//score/quality/compiler_warnings",
+    ],
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/configuration:__subpackages__",
+    ],
+    deps = [
+        ":configuration_local",
+        ":i_configuration_parsing_strategy",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "config_validate",
+    srcs = ["config_validate.cpp"],
+    hdrs = ["config_validate.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/configuration:__subpackages__",
+    ],
+    deps = [
+        ":configuration_local",
+        ":lola_service_instance_deployment",
+        ":lola_service_type_deployment",
+        "//score/mw/com/impl:instance_specifier",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/mw/log",
+    ],
+)
+
+cc_library(
+    name = "config_parser",
+    srcs = ["config_parser.cpp"],
+    hdrs = ["config_parser.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        ":configuration_json_parsing_strategy",
+    ],
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/configuration:__subpackages__",
+    ],
+    deps = [
+        ":configuration_local",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "configuration_local",
+    srcs = ["configuration.cpp"],
+    hdrs = ["configuration.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/configuration:__subpackages__",
+    ],
+    deps = [
+        ":configuration_error",
+        ":global_configuration",
+        ":service_identifier_type",
+        ":service_instance_deployment",
+        ":service_type_deployment",
+        ":tracing_configuration",
+        "//score/mw/com/impl:instance_specifier",
+        "//score/mw/com/impl/tracing/configuration:service_element_identifier",
+        "//score/mw/com/impl/tracing/configuration:tracing_config",
+        "@score_baselibs//score/mw/log",
+    ],
+)
+
+cc_library(
+    name = "global_configuration",
+    srcs = ["global_configuration.cpp"],
+    hdrs = ["global_configuration.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = ["@score_baselibs//score/mw/log"],
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl:__subpackages__",
+    ],
+    deps = [
+        ":quality_type",
+        ":shm_size_calc_mode",
+    ],
+)
+
+cc_library(
+    name = "tracing_configuration",
+    srcs = ["tracing_configuration.cpp"],
+    hdrs = ["tracing_configuration.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = ["@score_baselibs//score/mw/log"],
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/configuration:__subpackages__",
+    ],
+    deps = [
+        "//score/mw/com/impl:instance_specifier",
+        "//score/mw/com/impl/tracing/configuration:service_element_identifier",
+        "//score/mw/com/impl/tracing/configuration:service_element_identifier_view",
+        "//score/mw/com/impl/tracing/configuration:tracing_config",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "configuration_error",
+    srcs = ["configuration_error.cpp"],
+    hdrs = ["configuration_error.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/configuration:__subpackages__",
+    ],
+    deps = ["@score_baselibs//score/result"],
+)
+
+cc_library(
+    name = "lola_event_instance_deployment",
+    srcs = ["lola_event_instance_deployment.cpp"],
+    hdrs = ["lola_event_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        ":configuration_common_resources",
+        "@score_baselibs//score/language/safecpp/safe_math",
+        "@score_baselibs//score/mw/log",
+    ],
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+    deps = [
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "lola_event_id",
+    srcs = ["lola_event_id.cpp"],
+    hdrs = ["lola_event_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [":lola_service_element_id"],
+)
+
+cc_library(
+    name = "lola_field_id",
+    srcs = ["lola_field_id.cpp"],
+    hdrs = ["lola_field_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola/methods:__pkg__"],
+    deps = [":lola_service_element_id"],
+)
+
+cc_library(
+    name = "lola_method_id",
+    srcs = ["lola_method_id.cpp"],
+    hdrs = ["lola_method_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola/methods:__pkg__"],
+    deps = [":lola_service_element_id"],
+)
+
+cc_library(
+    name = "lola_service_element_id",
+    srcs = ["lola_service_element_id.cpp"],
+    hdrs = ["lola_service_element_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola/methods:__pkg__"],
+)
+
+cc_library(
+    name = "lola_service_id",
+    srcs = ["lola_service_id.cpp"],
+    hdrs = ["lola_service_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+)
+
+cc_library(
+    name = "lola_field_instance_deployment",
+    srcs = ["lola_field_instance_deployment.cpp"],
+    hdrs = ["lola_field_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        ":lola_event_instance_deployment",
+    ],
+)
+
+cc_library(
+    name = "lola_method_instance_deployment",
+    srcs = ["lola_method_instance_deployment.cpp"],
+    hdrs = ["lola_method_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [":configuration_common_resources"],
+    tags = ["FFI"],
+    deps = ["@score_baselibs//score/json"],
+)
+
+cc_library(
+    name = "lola_service_instance_deployment",
+    srcs = ["lola_service_instance_deployment.cpp"],
+    hdrs = ["lola_service_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/gateway:__subpackages__",
+    ],
+    deps = [
+        ":configuration_common_resources",
+        ":lola_event_instance_deployment",
+        ":lola_field_instance_deployment",
+        ":lola_method_instance_deployment",
+        ":lola_service_instance_id",
+        ":quality_type",
+        "//score/mw/com/impl:error",
+        "//score/mw/com/impl:service_element_type",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "lola_service_type_deployment",
+    srcs = ["lola_service_type_deployment.cpp"],
+    hdrs = ["lola_service_type_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":binding_service_type_deployment",
+        ":lola_event_id",
+        ":lola_field_id",
+        ":lola_method_id",
+        ":lola_service_id",
+    ],
+)
+
+cc_library(
+    name = "someip_service_element_id",
+    srcs = ["someip_service_element_id.cpp"],
+    hdrs = ["someip_service_element_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+)
+
+cc_library(
+    name = "someip_service_id",
+    srcs = ["someip_service_id.cpp"],
+    hdrs = ["someip_service_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+)
+
+cc_library(
+    name = "someip_event_id",
+    srcs = ["someip_event_id.cpp"],
+    hdrs = ["someip_event_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [":someip_service_element_id"],
+)
+
+cc_library(
+    name = "someip_field_id",
+    srcs = ["someip_field_id.cpp"],
+    hdrs = ["someip_field_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [":someip_service_element_id"],
+)
+
+cc_library(
+    name = "someip_method_id",
+    srcs = ["someip_method_id.cpp"],
+    hdrs = ["someip_method_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [":someip_service_element_id"],
+)
+
+cc_library(
+    name = "someip_service_type_deployment",
+    srcs = ["someip_service_type_deployment.cpp"],
+    hdrs = ["someip_service_type_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":binding_service_type_deployment",
+        ":someip_event_id",
+        ":someip_field_id",
+        ":someip_method_id",
+        ":someip_service_id",
+    ],
+)
+
+cc_library(
+    name = "someip_service_instance_id",
+    srcs = ["someip_service_instance_id.cpp"],
+    hdrs = ["someip_service_instance_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [":configuration_common_resources"],
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/someip:__pkg__"],
+    deps = ["@score_baselibs//score/json"],
+)
+
+cc_library(
+    name = "someip_event_instance_deployment",
+    srcs = ["someip_event_instance_deployment.cpp"],
+    hdrs = ["someip_event_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        ":configuration_common_resources",
+        "@score_baselibs//score/mw/log",
+    ],
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+    deps = [
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "someip_field_instance_deployment",
+    srcs = ["someip_field_instance_deployment.cpp"],
+    hdrs = ["someip_field_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        ":someip_event_instance_deployment",
+    ],
+)
+
+cc_library(
+    name = "someip_service_instance_deployment",
+    srcs = ["someip_service_instance_deployment.cpp"],
+    hdrs = ["someip_service_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        ":someip_event_instance_deployment",
+        ":someip_field_instance_deployment",
+        ":someip_service_instance_id",
+        "//score/mw/com/impl:error",
+        "//score/mw/com/impl:service_element_type",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "lola_service_instance_id",
+    srcs = ["lola_service_instance_id.cpp"],
+    hdrs = ["lola_service_instance_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        ":configuration_common_resources",
+        "@score_baselibs//score/language/safecpp/safe_math",
+    ],
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola:__pkg__"],
+    deps = ["@score_baselibs//score/json"],
+)
+
+cc_library(
+    name = "service_identifier_type",
+    srcs = ["service_identifier_type.cpp"],
+    hdrs = ["service_identifier_type.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        ":service_version_type",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "service_instance_deployment",
+    srcs = ["service_instance_deployment.cpp"],
+    hdrs = ["service_instance_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        ":lola_service_instance_deployment",
+        ":quality_type",
+        ":service_identifier_type",
+        ":someip_service_instance_deployment",
+        "//score/mw/com/impl:binding_type",
+        "//score/mw/com/impl:error",
+        "//score/mw/com/impl:instance_specifier",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "service_instance_id",
+    srcs = ["service_instance_id.cpp"],
+    hdrs = ["service_instance_id.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+    deps = [
+        ":configuration_common_resources",
+        ":lola_service_instance_id",
+        ":someip_service_instance_id",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "service_type_deployment",
+    srcs = ["service_type_deployment.cpp"],
+    hdrs = ["service_type_deployment.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        "@score_baselibs//score/language/futurecpp",
+    ],
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        ":lola_service_type_deployment",
+        ":someip_service_type_deployment",
+        "@score_baselibs//score/json",
+    ],
+)
+
+cc_library(
+    name = "service_version_type",
+    srcs = ["service_version_type.cpp"],
+    hdrs = ["service_version_type.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        "@score_baselibs//score/language/futurecpp",
+    ],
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        "@score_baselibs//score/json",
+    ],
+)
+
+cc_library(
+    name = "binding_service_type_deployment",
+    srcs = ["binding_service_type_deployment.cpp"],
+    hdrs = [
+        "binding_service_type_deployment.h",
+        "binding_service_type_deployment_impl.h",
+    ],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        ":configuration_common_resources",
+        "//score/mw/com/impl:binding_type",
+        "//score/mw/com/impl:service_element_type",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/safecpp/safe_math",
+    ],
+)
+
+cc_library(
+    name = "shm_size_calc_mode",
+    srcs = ["shm_size_calc_mode.cpp"],
+    hdrs = ["shm_size_calc_mode.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+)
+
+cc_library(
+    name = "configuration_common_resources",
+    srcs = ["configuration_common_resources.cpp"],
+    hdrs = ["configuration_common_resources.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    deps = [
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/mw/log",
+    ],
+)
+
+cc_library(
+    name = "configuration",
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+    deps = [
+        ":config_parser",
+        ":configuration_error",
+        ":configuration_local",
+        ":lola_event_id",
+        ":lola_event_instance_deployment",
+        ":lola_field_id",
+        ":lola_method_id",
+        ":lola_service_instance_deployment",
+        ":lola_service_type_deployment",
+        ":service_identifier_type",
+        ":service_instance_deployment",
+        ":service_instance_id",
+        ":service_type_deployment",
+        ":service_version_type",
+        ":shm_size_calc_mode",
+    ],
+)
+
+cc_unit_test(
+    name = "config_parser_test",
+    srcs = ["config_parser_test.cpp"],
+    data = ["example/mw_com_config.json"],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":config_parser",
+        ":configuration_json_parsing_strategy",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)
+
+cc_unit_test(
+    name = "configuration_json_parsing_strategy_test",
+    srcs = ["configuration_json_parsing_strategy_test.cpp"],
+    data = ["example/mw_com_config.json"],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":configuration_json_parsing_strategy",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)
+
+cc_unit_test(
+    name = "config_validate_test",
+    srcs = ["config_validate_test.cpp"],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":config_validate",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)
+
+cc_unit_test(
+    name = "config_parser_methods_test",
+    srcs = ["config_parser_methods_test.cpp"],
+    data = ["example/mw_com_config.json"],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":config_parser",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)
+
+cc_unit_test(
+    name = "configuration_common_resources_test",
+    srcs = ["configuration_common_resources_test.cpp"],
+    features = [
+        "aborts_upon_exception",
+    ],
+    deps = [
+        ":configuration_common_resources",
+        "@score_baselibs//score/json",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_unit_test(
+    name = "configuration_error_test",
+    srcs = ["configuration_error_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [":configuration_error"],
+)
+
+cc_unit_test(
+    name = "configuration_test",
+    srcs = ["configuration_test.cpp"],
+    data = ["example/mw_com_config.json"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":config_parser",
+        ":configuration_local",
+        "//score/mw/com/impl/configuration/test:configuration_store",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_unit_test(
+    name = "lola_service_instance_deployment_test",
+    srcs = ["lola_service_instance_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":lola_service_instance_deployment",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_unit_test(
+    name = "lola_event_instance_deployment_test",
+    srcs = ["lola_event_instance_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":lola_event_instance_deployment",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "lola_field_instance_deployment_test",
+    srcs = ["lola_field_instance_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":lola_field_instance_deployment",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "lola_method_instance_deployment_test",
+    srcs = ["lola_method_instance_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":lola_method_instance_deployment",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)
+
+cc_unit_test(
+    name = "quality_type_test",
+    srcs = ["quality_type_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [":quality_type"],
+)
+
+cc_unit_test(
+    name = "service_identifier_type_test",
+    srcs = ["service_identifier_type_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":service_identifier_type",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "service_instance_deployment_test",
+    srcs = ["service_instance_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":service_instance_deployment",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "service_version_type_test",
+    srcs = ["service_version_type_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":service_version_type",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "service_type_deployment_test",
+    srcs = ["service_type_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":service_type_deployment",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "lola_service_type_deployment_test",
+    srcs = ["lola_service_type_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":lola_service_type_deployment",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "service_instance_id_test",
+    srcs = ["service_instance_id_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":service_instance_id",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "someip_service_instance_deployment_test",
+    srcs = ["someip_service_instance_deployment_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":someip_service_instance_deployment",
+    ],
+)
+
+cc_unit_test(
+    name = "lola_service_instance_id_test",
+    srcs = ["lola_service_instance_id_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":lola_service_instance_id",
+        "//score/mw/com/impl/configuration/test:configuration_test_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "global_configuration_test",
+    srcs = ["global_configuration_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":global_configuration",
+    ],
+)
+
+cc_unit_test(
+    name = "tracing_configuration_test",
+    srcs = ["tracing_configuration_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":tracing_configuration",
+    ],
+)
+
+cc_unit_test(
+    name = "shm_size_calc_mode_test",
+    srcs = ["shm_size_calc_mode_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [":shm_size_calc_mode"],
+)
+
+filegroup(
+    name = "mw_com_config.json",
+    srcs = ["example/mw_com_config.json"],
+    visibility = ["//score/mw/com:__subpackages__"],
+)
+
+filegroup(
+    name = "mw_com_config_other.json",
+    srcs = ["example/mw_com_config_other.json"],
+    visibility = ["//score/mw/com:__subpackages__"],
+)
+
+filegroup(
+    name = "mw_com_config_to_merge.json",
+    srcs = ["example/mw_com_config_to_merge.json"],
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+)
+
+filegroup(
+    name = "mw_com_config_to_merge_second.json",
+    srcs = ["example/mw_com_config_to_merge_second.json"],
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+)
+
+filegroup(
+    name = "mw_com_config_invalid_trace_config_path.json",
+    srcs = ["example/mw_com_config_invalid_trace_config_path.json"],
+    visibility = ["//score/mw/com:__subpackages__"],
+)
+
+filegroup(
+    name = "mw_com_config_disabled_trace_config.json",
+    srcs = ["example/mw_com_config_disabled_trace_config.json"],
+    visibility = ["//score/mw/com:__subpackages__"],
+)
+
+filegroup(
+    name = "mw_com_config_valid_trace_config.json",
+    srcs = [
+        "example/mw_com_config_valid_trace_config.json",
+        "example/mw_com_config_valid_trace_config_external.json",
+    ],
+    visibility = ["//score/mw/com:__subpackages__"],
+)

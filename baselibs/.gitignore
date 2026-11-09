@@ -1,0 +1,14 @@
+bazel-*
+examples/integration/bazel-*
+user.bazelrc
+.cache
+compile_commands.json
+target/
+rust-project.json
+
+# docs build artifacts
+_build
+ubproject.toml
+
+# coverage report output (repo root only; tools/coverage is tracked)
+/coverage*/

@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,8 +15,9 @@ bazel build --config=aarch64-linux \
   //score/gatewayd \
   //score/someipd
 
-cd "${repo_root}"
+cd "${gateway_root}"
 bazel build --config=aarch64-linux --config=sdv-demo \
+  --package_path="%workspace%:${repo_root}" \
   //sdv-hack-demo:gateway_config \
   //sdv-hack-demo/serializer:serializer_shim \
   //sdv-hack-demo/serializer:base_serializer \
@@ -22,3 +27,5 @@ bazel build --config=aarch64-linux --config=sdv-demo \
   //sdv-hack-demo/remote_app:remote_app
 
 "${repo_root}/kuksa-databroker/scripts/build-rpi-aarch64.sh"
+bash "${repo_root}/sdv-hack-demo/build-runtime-aarch64.sh"
+#bash "${repo_root}/sdv-hack-demo/package-aarch64.sh"

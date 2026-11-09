@@ -133,7 +133,9 @@ The dynamics service defines `speed` and `speedAck`. The remote echoes a vehicle
 
 The provider generator also refreshes `mw_com_provider/generated/gateway_bindings.rs` and `gateway_runtime.rs` in the required KUKSA checkout. Its composition entry point is `databroker-mw-com/src/main.rs`. Gateway-compatible mappings must use the matching gateway adapter and LoLa manifest, not the standalone `BodyControlModuleService` profile's different names and native sample layouts.
 
-Packaging selects `bazel-out/aarch64-fastbuild/bin` in both Bazel workspaces instead of relying on the latest `bazel-bin` symlink. It compiles the demo gateway JSON as `mw_someip_config.bin` and ships a matching `mw_com_config.json`; the gateway's generic window-control/echo config is not used.
+The demo targets are built in the `inc_someip_gateway/` Bazel workspace, with the repository root added to Bazel's package path. Packaging selects `bazel-out/aarch64-fastbuild/bin` from that workspace and from `communication/` instead of relying on the latest `bazel-bin` symlink. It compiles the demo gateway JSON as `mw_someip_config.bin` and ships a matching `mw_com_config.json`; the gateway's generic window-control/echo config is not used.
+
+The vehicle app uses the pinned `@kuksa_proto` repository declared in the gateway's `MODULE.bazel` for its VAL v2 gRPC client. `third_party/kuksa_proto/BUILD.bazel` is the BUILD template for that external repository, not a local package containing proto sources.
 
 The vehicle archive includes gateway daemons/runfiles, bridge, broker/CLI, provider config, vehicle app/runfiles, serializers, and launchers. It excludes the separate `kuksa_high_beam_udp_provider`. The remote archive contains the remote app/runfiles and launch/configuration files. Regenerate, rebuild, package, and redeploy both archives together after signal-contract changes.
 
@@ -143,9 +145,9 @@ The vehicle launcher waits for gateway receive shared memory before KUKSA startu
 
 The original integration baseline is upstream `eclipse-score/inc_someip_gateway` `main`, commit `32624b21`, plus integration changes: speed/boolean serializer and schema support, `eventgroup_ids` handling and tracing in `someipd`, and the empty-handle guard, proxy-creation retry, and `App->SOME/IP` tracing in `gatewayd`. Treat this as integration history, not a substitute for checking the current checkout.
 
-The integration deliberately keeps `score_communication` at `0.3.0` and `score_baselibs` at `0.2.12` in [inc_someip_gateway/MODULE.bazel](inc_someip_gateway/MODULE.bazel), because upgrading the gateway alone changes the LoLa runtime also linked by KUKSA through `communication/`. The mw::com IPC binding target `//score/gateway_ipc_binding:gateway_ipc_binding_mw_com` and its aggregate test are disabled through `target_compatible_with`. Re-enable only after upgrading communication and gateway together and revalidating the complete flow.
+Both [inc_someip_gateway/MODULE.bazel](inc_someip_gateway/MODULE.bazel) and [communication/MODULE.bazel](communication/MODULE.bazel) use local path overrides so gateway daemons, demo apps, and KUKSA share the repository's `communication/` and `baselibs/` sources. The former fetched communication revision used a different shared-memory event-metadata layout from the local KUKSA runtime, causing missing-event-metadata termination and broker aborts. Rebuild and redeploy all participants together after changing either dependency; do not mix old and new binaries or reuse their shared-memory state. The mw::com IPC binding target `//score/gateway_ipc_binding:gateway_ipc_binding_mw_com` and its aggregate test remain disabled through `target_compatible_with`; this change does not certify that separate binding.
 
-The `--config=sdv-demo` build configuration compiles legacy host C dependencies as GNU C11, avoiding GLib `bool` field conflicts with GCC 15's C23 default without passing C-only flags to C++ compilation.
+The `--config=sdv-demo` build configuration (defined in `inc_someip_gateway/.bazelrc`) compiles legacy host C dependencies as GNU C11, avoiding GLib `bool` field conflicts with GCC 15's C23 default without passing C-only flags to C++ compilation.
 
 ## Standalone BCM Profile
 

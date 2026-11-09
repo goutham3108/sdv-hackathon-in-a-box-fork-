@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,6 +20,10 @@ fi
 export SDV_BIND_IP=0.0.0.0
 export SIGNAL_ROUTE_CONFIG="${root}/signal_routes.json"
 vehicle_app_mode="${VEHICLE_APP_MODE:-combined}"
+if [[ "${vehicle_app_mode}" != signals && ! -x "${root}/databroker-mw-com" ]]; then
+    echo "Required broker executable missing or not executable: ${root}/databroker-mw-com. Redeploy the complete vehicle archive." >&2
+    exit 1
+fi
 export HIGH_BEAM_COMMAND_MODE="${HIGH_BEAM_COMMAND_MODE:-kuksa}"
 case "$HIGH_BEAM_COMMAND_MODE" in
     kuksa) export KUKSA_HIGH_BEAM_ACTUATION=1 ;;
@@ -43,7 +51,7 @@ vsomeip_lib_dir="$(find "${root}/someipd.runfiles" -name libvsomeip3.so.3 -print
 test -n "${vsomeip_lib_dir}"
 export LD_LIBRARY_PATH="${root}:${vsomeip_lib_dir}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
-stale_pattern='someipd|gatewayd|(^|/)udp_bridge([[:space:]]|$)|(^|/)score_app([[:space:]]|$)|body_signal_test_app|databroker-mw-com-demo|start_kuksa'
+stale_pattern='someipd|gatewayd|(^|/)udp_bridge([[:space:]]|$)|(^|/)score_app([[:space:]]|$)|body_signal_test_app|databroker-mw-com|start_kuksa'
 # Stop a previous launcher's KUKSA retry loop first, otherwise it respawns the broker and steals the port.
 pkill -KILL -f 'start_kuksa' 2>/dev/null || true
 pkill -TERM -f "${stale_pattern}" 2>/dev/null || true
@@ -150,7 +158,7 @@ start_kuksa() {
         sleep 0.5
     done
     for attempt in $(seq 1 5); do
-        "${root}/databroker-mw-com-demo" \
+        "${root}/databroker-mw-com" \
             --address 0.0.0.0:55555 \
             --provider-config "${root}/mw_com_provider/generated/gateway_provider_config.json" \
             --score-config "${root}/mw_com_config.json" && return 0

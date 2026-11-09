@@ -1,0 +1,8 @@
+{
+	"score::pcp::CrocStateTraceable": {
+		"id": "string instead of int",
+		"ctxid": "CRoC",
+		"appid": "Plan",
+		"loglevel": 3
+	}
+}

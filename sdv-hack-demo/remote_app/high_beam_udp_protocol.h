@@ -1,3 +1,7 @@
+// Copyright (c) 2026 Contributors to the Eclipse Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // Local copy for remote app package
 
 #ifndef D01C7798_D828_4851_832E_6E8136237E59

@@ -1,0 +1,25 @@
+{
+    "ecuId": "ECU1",
+    "appId": "UNKN",
+    "logLevel": "kInfo",
+    "logMode": "kRemote|kConsole|kFile|kSystem",
+    "contextConfigs": [
+        {
+            "name": "vcip",
+            "logLevel": "kError"
+        },
+        {
+            "name": "vcom",
+            "logLevel": "kOff"
+        }
+    ],
+    "stackBufferSize": 3000,
+    "ringBufferSize": 4096,
+    "logLevelThresholdConsole": "kVerbose",
+    "overwriteOnFull": true,
+    "logFilePath": "/tmp",
+    "numberOfSlots": 8,
+    "slotSizeBytes": 1500,
+    "datarouterUid": 1038,
+    "dynamicDatarouterIdentifiers" : true
+}

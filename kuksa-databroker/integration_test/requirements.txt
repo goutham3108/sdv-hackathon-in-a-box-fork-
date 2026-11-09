@@ -1,0 +1,7 @@
+asyncio
+grpcio
+kuksa-client==0.5.1
+protobuf
+pytest
+pytest-ordering
+pytest-asyncio

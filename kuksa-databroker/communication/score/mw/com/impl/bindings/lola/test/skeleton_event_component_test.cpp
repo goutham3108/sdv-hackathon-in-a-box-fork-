@@ -1,0 +1,416 @@
+/********************************************************************************
+ * Copyright (c) 2026 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/consumer_event_data_control_local_view.h"
+#include "score/mw/com/impl/bindings/lola/event_data_control_composite.h"
+#include "score/mw/com/impl/bindings/lola/messaging/message_passing_service_mock.h"
+#include "score/mw/com/impl/bindings/lola/partial_restart_path_builder.h"
+#include "score/mw/com/impl/bindings/lola/runtime_mock.h"
+#include "score/mw/com/impl/bindings/lola/shm_path_builder.h"
+#include "score/mw/com/impl/bindings/lola/skeleton_event.h"
+#include "score/mw/com/impl/bindings/lola/test/skeleton_test_resources.h"
+#include "score/mw/com/impl/bindings/mock_binding/tracing/tracing_runtime.h"
+#include "score/mw/com/impl/sample_allocatee_guard.h"
+#include "score/mw/com/impl/service_discovery_mock.h"
+#include "score/mw/com/impl/test/runtime_mock_guard.h"
+#include "score/mw/com/impl/tracing/tracing_runtime_mock.h"
+
+#include "score/memory/shared/memory_resource_registry.h"
+#include "score/memory/shared/shared_memory_factory.h"
+
+#include <gmock/gmock.h>
+#include <gtest/gtest.h>
+
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace score::mw::com::impl::lola
+{
+
+class SkeletonEventAttorney
+{
+  public:
+    explicit SkeletonEventAttorney(SkeletonEvent& skeleton_event) noexcept : skeleton_event_{skeleton_event} {}
+
+    EventDataControlComposite<>& GetEventDataControlComposite()
+    {
+        return skeleton_event_.GetEventDataControlComposite();
+    }
+
+    /// \brief Set handler availability flags for testing purposes
+    void SetHandlerAvailability(bool qm_available, bool asil_b_available)
+    {
+        skeleton_event_.SetQmNotificationsRegistered(qm_available);
+        skeleton_event_.SetAsilBNotificationsRegistered(asil_b_available);
+    }
+
+  private:
+    SkeletonEvent& skeleton_event_;
+};
+
+namespace
+{
+
+using SkeletonEventSampleType = std::uint32_t;
+const memory::DataTypeSizeInfo kEventSampleTypeSizeInfo{sizeof(SkeletonEventSampleType),
+                                                        alignof(SkeletonEventSampleType)};
+
+template <std::size_t MaxSamples>
+class SkeletonEventComponentTestTemplateFixture : public ::testing::Test
+{
+  public:
+    static constexpr std::size_t kNumberMaxSamples = MaxSamples;
+
+    void SetUp() override
+    {
+        ON_CALL(runtime_mock_guard_.runtime_mock_, GetBindingRuntime)
+            .WillByDefault(::testing::Return(&lola_runtime_mock_));
+        ON_CALL(lola_runtime_mock_, GetLolaMessaging)
+            .WillByDefault(::testing::ReturnRef(message_passing_service_mock_));
+        ON_CALL(runtime_mock_guard_.runtime_mock_, GetServiceDiscovery())
+            .WillByDefault(::testing::ReturnRef(service_discovery_mock_));
+        ON_CALL(runtime_mock_guard_.runtime_mock_, GetTracingRuntime())
+            .WillByDefault(::testing::Return(&tracing_runtime_mock_));
+        ON_CALL(tracing_runtime_mock_, GetBindingTracingRuntime(BindingType::kLoLa))
+            .WillByDefault(::testing::ReturnRef(binding_tracing_runtime_mock_));
+
+        SkeletonBinding::SkeletonEventBindings events{};
+        SkeletonBinding::SkeletonFieldBindings fields{};
+        events.emplace(fake_event_name_, skeleton_event_);
+        const auto prepare_offer_result = parent_skeleton_->PrepareOffer(events, fields, {});
+        ASSERT_TRUE(prepare_offer_result.has_value());
+    }
+
+    void TearDown() override
+    {
+        skeleton_event_.PrepareStopOffer();
+        parent_skeleton_->PrepareStopOffer({});
+        parent_skeleton_.reset();
+        score::memory::shared::MemoryResourceRegistry::getInstance().clear();
+
+        const auto is_regular_file_data = score::filesystem::IStandardFilesystem::instance().IsRegularFile(
+            "/dev/shm/lola-data-0000000000000002-00016");
+        ASSERT_TRUE(is_regular_file_data.has_value());
+        EXPECT_FALSE(is_regular_file_data.value());
+
+        const auto is_regular_file_ctl = score::filesystem::IStandardFilesystem::instance().IsRegularFile(
+            "/dev/shm/lola-ctl-0000000000000002-00016");
+        ASSERT_TRUE(is_regular_file_ctl.has_value());
+        EXPECT_FALSE(is_regular_file_ctl.value());
+
+        const auto is_regular_file_ctl_b = score::filesystem::IStandardFilesystem::instance().IsRegularFile(
+            "/dev/shm/lola-ctl-0000000000000002-00016-b");
+        ASSERT_TRUE(is_regular_file_ctl_b.has_value());
+        EXPECT_FALSE(is_regular_file_ctl_b.value());
+    }
+
+    InstanceIdentifier GetValidInstanceIdentifier() noexcept
+    {
+        return make_InstanceIdentifier(valid_asil_instance_deployment_, valid_type_deployment_);
+    }
+
+    std::uint32_t GetLastSendEvent() const
+    {
+        const auto lola_service_type_deployment =
+            std::get<LolaServiceTypeDeployment>(valid_type_deployment_.binding_info_);
+        ShmPathBuilder path_builder{lola_service_type_deployment.service_id_};
+
+        const auto lola_service_instance_deployment =
+            std::get<LolaServiceInstanceDeployment>(valid_asil_instance_deployment_.bindingInfo_);
+        const auto instance_id = lola_service_instance_deployment.instance_id_.value().GetId();
+
+        auto memory =
+            score::memory::shared::SharedMemoryFactory::Open(path_builder.GetDataChannelShmName(instance_id), false);
+
+        auto* storage = static_cast<ServiceDataStorage*>(memory->getUsableBaseAddress());
+        auto& event_data_storage = storage->GetEventDataStorage(fake_element_fq_id_);
+
+        auto path = path_builder.GetControlChannelShmName(instance_id, QualityType::kASIL_QM);
+        auto memory_control = score::memory::shared::SharedMemoryFactory::Open(path, false);
+        auto* control_storage = static_cast<ServiceDataControl*>(memory_control->getUsableBaseAddress());
+
+        auto& event_control = control_storage->event_controls_.find(fake_element_fq_id_)->second;
+
+        // To reference an event, we need to emulate what a ProxyEvent would do so we need to register a dummy
+        // TransactionLog, reference the event and then dereference the event. If we don't dereference the event, then
+        // the TransactionLogRegistrationGuard returned by RegisterProxyElement would crash since there would still be
+        // open transactions on destruction.
+        ConsumerEventDataControlLocalView<> consumer_event_data_control_local{event_control.data_control};
+        const TransactionLogId dummy_transaction_log_id{10};
+        auto registration_guard = event_control.transaction_log_set_.RegisterProxyElement(
+            dummy_transaction_log_id, consumer_event_data_control_local);
+        auto slot_index = consumer_event_data_control_local.ReferenceNextEvent(0);
+        EXPECT_TRUE(slot_index.has_value());
+        auto* const value = static_cast<std::uint32_t*>(
+            event_data_storage.GetTypeErasedDataSlot(slot_index.value(), sizeof(std::uint32_t)));
+
+        consumer_event_data_control_local.DereferenceEvent(slot_index.value());
+
+        return *value;
+    }
+
+    std::size_t GetFreeSampleSlots() const
+    {
+        std::size_t result{0};
+        const auto lola_service_type_deployment =
+            std::get<LolaServiceTypeDeployment>(valid_type_deployment_.binding_info_);
+        ShmPathBuilder path_builder{lola_service_type_deployment.service_id_};
+
+        const auto lola_service_instance_deployment =
+            std::get<LolaServiceInstanceDeployment>(valid_asil_instance_deployment_.bindingInfo_);
+        const auto instance_id = lola_service_instance_deployment.instance_id_.value().GetId();
+
+        auto path = path_builder.GetControlChannelShmName(instance_id, QualityType::kASIL_QM);
+        auto memory_control = score::memory::shared::SharedMemoryFactory::Open(path, false);
+        auto* control_storage = static_cast<ServiceDataControl*>(memory_control->getUsableBaseAddress());
+        const auto search = control_storage->event_controls_.find(fake_element_fq_id_);
+        EXPECT_TRUE(search != control_storage->event_controls_.cend());
+        auto& event_control = search->second;
+
+        for (SlotIndexType i = 0U; i < MaxSamples; i++)
+        {
+            ConsumerEventDataControlLocalView<> consumer_event_data_control_local{event_control.data_control};
+            if (consumer_event_data_control_local[i].IsInvalid())
+            {
+                result++;
+            }
+        }
+        return result;
+    }
+
+    void AllocateQmSlots(const std::size_t number_of_slots_to_allocate)
+    {
+        auto& event_data_control_composite = SkeletonEventAttorney{skeleton_event_}.GetEventDataControlComposite();
+        auto& qm_event_data_control_local = event_data_control_composite.GetQmEventDataControlLocal();
+
+        for (std::size_t counter = 0U; counter < number_of_slots_to_allocate; ++counter)
+        {
+            ASSERT_TRUE(qm_event_data_control_local.AllocateNextSlot());
+        }
+    }
+
+    const std::uint8_t max_subscribers_{3U};
+    const bool enforce_max_samples_{true};
+    const impl::tracing::SkeletonEventTracingData disabled_tracing_data_{};
+    static constexpr bool field_getter_disabled_{false};
+    const ElementFqId fake_element_fq_id_{1, 1, 1, ServiceElementType::EVENT};
+    const std::string fake_event_name_{"dummy"};
+    const InstanceSpecifier instance_specifier_{
+        InstanceSpecifier::Create(std::string{"/my_dummy_instance_specifier"}).value()};
+
+    LolaServiceInstanceDeployment binding_info_{CreateLolaServiceInstanceDeployment(
+        test::kDefaultLolaInstanceId,
+        {{fake_event_name_, LolaEventInstanceDeployment{MaxSamples, 10U, 1U, true, 0}}},
+        {},
+        {},
+        {},
+        {})};
+
+    /// \brief A very basic (Lola) ServiceTypeDeployment, which just contains a service-id and NO events at all!
+    /// \details For some of the basic tests, this is sufficient and since services without events are a valid use
+    /// case
+    ///          (at least later, when we also support fields/service-methods).
+    LolaServiceId service_id_{2U};
+    const ServiceTypeDeployment valid_type_deployment_{CreateTypeDeployment(service_id_, {{fake_event_name_, 42U}})};
+
+    /// \brief A very basic (Lola) ASIL-B ServiceInstanceDeployment, which relates to the
+    ///        valid_type_deployment_ and has a shm-size configuration of 500.
+    /// \note same setup as valid_qm_instance_deployment, but ASIL-QM and ASIL-B.
+    ServiceInstanceDeployment valid_asil_instance_deployment_{make_ServiceIdentifierType("foo"),
+                                                              binding_info_,
+                                                              QualityType::kASIL_B,
+                                                              instance_specifier_};
+
+    /// mocks used by test
+    RuntimeMockGuard runtime_mock_guard_;
+    lola::RuntimeMock lola_runtime_mock_;
+    impl::tracing::TracingRuntimeMock tracing_runtime_mock_{};
+    impl::tracing::mock_binding::TracingRuntime binding_tracing_runtime_mock_{};
+    MessagePassingServiceMock message_passing_service_mock_;
+    ServiceDiscoveryMock service_discovery_mock_{};
+
+    std::unique_ptr<Skeleton> parent_skeleton_{
+        Skeleton::Create(GetValidInstanceIdentifier(),
+                         filesystem::FilesystemFactory{}.CreateInstance(),
+                         std::make_unique<ShmPathBuilder>(service_id_),
+                         std::make_unique<PartialRestartPathBuilder>(service_id_))};
+    SkeletonEvent skeleton_event_{
+        *parent_skeleton_,
+        fake_element_fq_id_,
+        fake_event_name_,
+        kEventSampleTypeSizeInfo,
+        SkeletonEventProperties{MaxSamples, 0U, 0U, false, max_subscribers_, enforce_max_samples_},
+        disabled_tracing_data_};
+};
+
+using SkeletonEventComponentTestFixture = SkeletonEventComponentTestTemplateFixture<5>;
+TEST_F(SkeletonEventComponentTestFixture, CanAllocateAndSendEvent)
+{
+    RecordProperty("Verifies", "SCR-5898932, SSR-6225206, SCR-21470600, SCR-21553623");
+    RecordProperty("Description",
+                   "Checks whether a skeleton can send data into shared memory (req. SCR-5898932, SCR-21553623) and "
+                   "slot allocation works (req. SSR-6225206, SCR-21470600).");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("Priority", "1");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    // Given an offered event in an offered service
+    const auto prepare_offer_result = skeleton_event_.PrepareOffer(std::nullopt);
+    ASSERT_TRUE(prepare_offer_result.has_value());
+
+    // Simulate handlers being available for the test
+    // This is necessary because the optimization only sends NotifyEvent when handlers are present
+    auto attorney = SkeletonEventAttorney{skeleton_event_};
+    attorney.SetHandlerAvailability(true, true);  // Enable both QM and ASIL-B handler availability
+
+    // When allocating and sending the allocated event
+    auto slot_result = skeleton_event_.Allocate(SampleAllocateeGuard{});
+    ASSERT_TRUE(slot_result.has_value());
+    auto slot = std::move(slot_result).value();
+
+    void* type_erased_value_ptr = slot.Get();
+    SkeletonEventSampleType new_value{5U};
+    std::memcpy(type_erased_value_ptr, &new_value, sizeof(SkeletonEventSampleType));
+
+    // expect, that an event update notification is sent for QM and ASIL-B
+    EXPECT_CALL(message_passing_service_mock_, NotifyEvent(QualityType::kASIL_QM, fake_element_fq_id_));
+    EXPECT_CALL(message_passing_service_mock_, NotifyEvent(QualityType::kASIL_B, fake_element_fq_id_));
+    ASSERT_TRUE(skeleton_event_.Send(std::move(slot), {}));
+
+    // Then the send event in shared memory can be found by a proxy
+    EXPECT_EQ(GetLastSendEvent(), 5);
+}
+
+TEST_F(SkeletonEventComponentTestFixture, SkeletonWillCalculateEventMetaInfoFromSkeletonEventType)
+{
+    RecordProperty("Verifies", "SCR-32392058");
+    RecordProperty("Description",
+                   "Checks that the type meta information is calculated based on the provided event / field type.");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    // Given a Skeleton containing a SkeletonEvent which has been offered
+    const auto prepare_offer_result = skeleton_event_.PrepareOffer(std::nullopt);
+    ASSERT_TRUE(prepare_offer_result.has_value());
+
+    // When getting the EventMetaInfo for the skeleton event
+    const auto& event_meta_info = SkeletonAttorney{*parent_skeleton_}.GetEventMetaInfo(fake_element_fq_id_);
+
+    // Then the event meta info should correspond to the type of the skeleton event
+    EXPECT_EQ(event_meta_info.data_type_info_.Alignment(), alignof(SkeletonEventSampleType));
+    EXPECT_EQ(event_meta_info.data_type_info_.Size(), sizeof(SkeletonEventSampleType));
+}
+
+using SkeletonEventSingleSlotComponentTestFixture = SkeletonEventComponentTestTemplateFixture<1>;
+
+TEST_F(SkeletonEventSingleSlotComponentTestFixture, SendFreesSampleAllocateePtrAfterReturning)
+{
+    RecordProperty("Verifies", "SCR-6244582");
+    RecordProperty(
+        "Description",
+        "Sends an event sample by Copy and verifies that the Sample Allocatee Ptr that gets allocated is destroyed.");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+    RecordProperty("Priority", "2");
+
+    // When offering the event
+    const auto prepare_offer_result = skeleton_event_.PrepareOffer(std::nullopt);
+    ASSERT_TRUE(prepare_offer_result.has_value());
+
+    // Expect that there is only one slot available
+    EXPECT_EQ(GetFreeSampleSlots(), 1);
+
+    SkeletonEventSampleType new_value{5U};
+
+    // and when calling Allocate and Send
+    auto allocate_result_1 = skeleton_event_.Allocate(SampleAllocateeGuard{});
+    ASSERT_TRUE(allocate_result_1.has_value());
+    auto allocated_slot_1 = std::move(allocate_result_1).value();
+    *static_cast<SkeletonEventSampleType*>(allocated_slot_1.Get()) = new_value;
+    const auto send_result_1 = skeleton_event_.Send(std::move(allocated_slot_1), {});
+
+    // and then Allocate again
+    auto allocate_result_2 = skeleton_event_.Allocate(SampleAllocateeGuard{});
+    // then the allocation is successful
+    ASSERT_TRUE(allocate_result_2.has_value());
+    // and then a 2nd Send is done
+    auto allocated_slot_2 = std::move(allocate_result_2).value();
+    *static_cast<SkeletonEventSampleType*>(allocated_slot_2.Get()) = new_value;
+    const auto send_result_2 = skeleton_event_.Send(std::move(allocated_slot_2), {});
+
+    // Then both sends return no errors indicating that each call allocated a slot and freed it before returning
+    ASSERT_TRUE(send_result_1.has_value());
+    ASSERT_TRUE(send_result_2.has_value());
+}
+
+TEST_F(SkeletonEventComponentTestFixture, CallingAllocateWhenQmSlotsCannotBeAllocatedReturnsValidResult)
+{
+    // Given an offered event in an offered service
+    const auto prepare_offer_result = skeleton_event_.PrepareOffer(std::nullopt);
+    ASSERT_TRUE(prepare_offer_result.has_value());
+
+    // and that the QM control section has misbehaved and allocated all its slots
+    AllocateQmSlots(kNumberMaxSamples);
+
+    // When allocating the allocated event
+    auto slot_result = skeleton_event_.Allocate(SampleAllocateeGuard{});
+
+    // Then a slot can still be allocated
+    ASSERT_TRUE(slot_result.has_value());
+}
+
+TEST_F(SkeletonEventComponentTestFixture, CallingSendAfterAllocateWhenQmSlotsCannotBeAllocatedReturnsValidResult)
+{
+    // Given an offered event in an offered service
+    const auto prepare_offer_result = skeleton_event_.PrepareOffer(std::nullopt);
+    ASSERT_TRUE(prepare_offer_result.has_value());
+
+    // and that the QM control section has misbehaved and allocated all its slots
+    AllocateQmSlots(kNumberMaxSamples);
+
+    // and given that a slot was allocated
+    auto slot_result = skeleton_event_.Allocate(SampleAllocateeGuard{});
+    ASSERT_TRUE(slot_result.has_value());
+
+    // When calling Send
+    const auto send_result = skeleton_event_.Send(std::move(slot_result).value(), {});
+
+    // Then a valid result is returned
+    ASSERT_TRUE(send_result.has_value());
+}
+
+TEST_F(SkeletonEventComponentTestFixture,
+       CallingSendAfterAllocateWhenQmSlotsCannotBeAllocatedCallsStopOfferServiceForQm)
+{
+    // Expecting that StopOfferService is called with QM quality type selector
+    EXPECT_CALL(service_discovery_mock_,
+                StopOfferService(::testing::_, IServiceDiscovery::QualityTypeSelector::kAsilQm));
+
+    // Given an offered event in an offered service
+    const auto prepare_offer_result = skeleton_event_.PrepareOffer(std::nullopt);
+    ASSERT_TRUE(prepare_offer_result.has_value());
+
+    // and that the QM control section has misbehaved and allocated all its slots
+    AllocateQmSlots(kNumberMaxSamples);
+
+    // and given that a slot was allocated
+    auto slot_result = skeleton_event_.Allocate(SampleAllocateeGuard{});
+    ASSERT_TRUE(slot_result.has_value());
+
+    // When calling Send
+    score::cpp::ignore = skeleton_event_.Send(std::move(slot_result).value(), {});
+}
+
+}  // namespace
+}  // namespace score::mw::com::impl::lola

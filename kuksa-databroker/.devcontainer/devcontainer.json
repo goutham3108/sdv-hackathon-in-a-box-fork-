@@ -1,0 +1,21 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/rust
+{
+	"name": "Kuksa DevContainer",
+	"build": {
+		"dockerfile": "Dockerfile"
+	},
+	"features": {
+		"ghcr.io/devcontainers/features/docker-in-docker:4.0.0": {
+			"moby": "false" //we are using debian trixie base image, which does not support OSS moby, so using docker-ce instead
+		}
+	},
+	"postStartCommand": "bash .devcontainer/postStartCommand.sh",
+	"mounts": [
+		{
+			"target": "/var/run/docker.sock",
+			"source": "/var/run/docker.sock",
+			"type": "bind"
+	 	}
+	 ]
+}

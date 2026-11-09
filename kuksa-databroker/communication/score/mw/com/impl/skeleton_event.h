@@ -1,0 +1,317 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_SKELETON_EVENT_H
+#define SCORE_MW_COM_IMPL_SKELETON_EVENT_H
+
+#include "score/mw/com/impl/instance_identifier.h"
+#include "score/mw/com/impl/mocking/i_skeleton_event.h"
+#include "score/mw/com/impl/plumbing/sample_allocatee_ptr.h"
+#include "score/mw/com/impl/plumbing/sample_ptr.h"
+#include "score/mw/com/impl/plumbing/skeleton_event_binding_factory.h"
+#include "score/mw/com/impl/skeleton_base.h"
+#include "score/mw/com/impl/skeleton_event_base.h"
+#include "score/mw/com/impl/skeleton_event_binding.h"
+#include "score/mw/com/impl/tracing/skeleton_event_tracing.h"
+
+#include "score/memory/data_type_size_info.h"
+#include "score/mw/log/logging.h"
+#include "score/result/result.h"
+
+#include <memory>
+#include <string_view>
+#include <utility>
+
+namespace score::mw::com::impl
+{
+
+// False Positive: this is a normal forward declaration.
+// coverity[autosar_cpp14_m3_2_3_violation]
+template <typename SampleDataType, typename... Tags>
+class SkeletonField;
+
+template <typename SampleDataType>
+class SkeletonEvent : public SkeletonEventBase
+{
+    template <typename T>
+    // Design decission: This friend class provides a view on the internals of SkeletonEvent.
+    // This enables us to hide unncecessary internals from the enduser.
+    // coverity[autosar_cpp14_a11_3_1_violation]
+    friend class SkeletonEventView;
+
+    // SkeletonField uses composition pattern to reuse code from SkeletonEvent. These two classes also have shared
+    // private APIs which necessitates the use of the friend keyword.
+    // coverity[autosar_cpp14_a11_3_1_violation]
+    template <typename T, typename... Ts>
+    friend class SkeletonFieldImpl;
+
+    // Empty struct that is used to make the second constructor only accessible to SkeletonEvent and SkeletonField (as
+    // the latter is a friend).
+    struct FieldOnlyConstructorEnabler
+    {
+    };
+
+  public:
+    using EventType = SampleDataType;
+
+    /// \brief Constructor that should be called when instantiating a SkeletonEvent within a generated Skeleton. It
+    /// should register itself with the skeleton on creation.
+    SkeletonEvent(SkeletonBase& skeleton_base, const std::string_view event_name);
+
+    /// \brief Constructor that should be called by a SkeletonField. This constructor does not register itself with the
+    /// skeleton on creation.
+    ///
+    /// We use FieldOnlyConstructorEnabler as an argument to prevent public usage of this constructor instead of using a
+    /// private constructor to allow the constructor to be used with std::make_unique.
+    SkeletonEvent(SkeletonBase& skeleton_base,
+                  const std::string_view event_name,
+                  std::unique_ptr<SkeletonEventBinding> binding,
+                  FieldOnlyConstructorEnabler);
+
+    /// Constructor that allows to set the binding directly.
+    ///
+    /// This is used only used for testing.
+    SkeletonEvent(SkeletonBase& skeleton_base,
+                  const std::string_view event_name,
+                  std::unique_ptr<SkeletonEventBinding> binding);
+
+    ~SkeletonEvent() override = default;
+
+    SkeletonEvent(const SkeletonEvent&) = delete;
+    SkeletonEvent& operator=(const SkeletonEvent&) & = delete;
+
+    SkeletonEvent(SkeletonEvent&& other) noexcept = default;
+    SkeletonEvent& operator=(SkeletonEvent&& other) & noexcept = default;
+
+    /**
+     * \api
+     * \brief Send event data to all subscribed clients.
+     * \details EventType is allocated by the user and provided to the middleware to send. The data is copied
+     *          by the middleware.
+     * \param sample_value The event data to be sent to subscribers.
+     * \return On failure, returns an error code.
+     */
+    Result<void> Send(const EventType& sample_value);
+
+    /**
+     * \api
+     * \brief Send event data using zero-copy mechanism.
+     * \details EventType is previously allocated by middleware via Allocate() and provided by the user to indicate
+     *          that filling the data is complete. This enables zero-copy transmission for better performance.
+     * \param sample The pre-allocated sample pointer containing the event data to be sent.
+     * \return On failure, returns an error code.
+     */
+    Result<void> Send(SampleAllocateePtr<EventType> sample);
+
+    /**
+     * \api
+     * \brief Allocates memory for EventType for the user to fill.
+     * \details This is especially necessary for Zero-Copy implementations. The allocated memory can then be
+     *          filled with data and sent using Send(SampleAllocateePtr).
+     * \return On success, returns a SampleAllocateePtr that can be filled with data. On failure, returns an error code.
+     */
+    Result<SampleAllocateePtr<EventType>> Allocate() noexcept;
+
+    void InjectMock(ISkeletonEvent<EventType>& skeleton_event_mock)
+    {
+        skeleton_event_mock_ = &skeleton_event_mock;
+    }
+
+  private:
+    /// \brief Creates the callback used to default-construct a type-erased sample slot for this event's SampleDataType.
+    static InitializeSampleCallback MakeInitializeSampleCallback() noexcept
+    {
+        return InitializeSampleCallback{[](void* const sample_ptr) noexcept {
+            score::cpp::ignore = new (sample_ptr) SampleDataType{};
+        }};
+    }
+    ISkeletonEvent<EventType>* skeleton_event_mock_;
+};
+
+template <typename SampleDataType>
+SkeletonEvent<SampleDataType>::SkeletonEvent(SkeletonBase& skeleton_base, const std::string_view event_name)
+    : SkeletonEventBase{event_name,
+                        MakeInitializeSampleCallback(),
+                        SkeletonEventBindingFactory::Create(
+                            SkeletonBaseView{skeleton_base}.GetAssociatedInstanceIdentifier(),
+                            SkeletonBaseView{skeleton_base}.GetBinding(),
+                            event_name,
+                            memory::DataTypeSizeInfo{sizeof(SampleDataType), alignof(SampleDataType)})},
+      skeleton_event_mock_{nullptr}
+{
+    SkeletonBaseView{skeleton_base}.RegisterEvent(event_name, GetReferenceToMoveable());
+
+    if (binding_ != nullptr)
+    {
+        const SkeletonBaseView skeleton_base_view{skeleton_base};
+        const auto& instance_identifier = skeleton_base_view.GetAssociatedInstanceIdentifier();
+        const auto binding_type = binding_->GetBindingType();
+        tracing_data_ =
+            tracing::GenerateSkeletonTracingStructFromEventConfig(instance_identifier, binding_type, event_name);
+        binding_->SetSkeletonEventTracingData(tracing_data_);
+    }
+}
+
+template <typename SampleDataType>
+SkeletonEvent<SampleDataType>::SkeletonEvent(SkeletonBase& skeleton_base,
+                                             const std::string_view event_name,
+                                             std::unique_ptr<SkeletonEventBinding> binding,
+                                             FieldOnlyConstructorEnabler)
+    : SkeletonEventBase{event_name, MakeInitializeSampleCallback(), std::move(binding)}, skeleton_event_mock_{nullptr}
+{
+    if (binding_ != nullptr)
+    {
+        const SkeletonBaseView skeleton_base_view{skeleton_base};
+        const auto& instance_identifier = skeleton_base_view.GetAssociatedInstanceIdentifier();
+        const auto binding_type = binding_->GetBindingType();
+        tracing_data_ =
+            tracing::GenerateSkeletonTracingStructFromFieldConfig(instance_identifier, binding_type, event_name);
+        binding_->SetSkeletonEventTracingData(tracing_data_);
+    }
+}
+
+template <typename SampleDataType>
+SkeletonEvent<SampleDataType>::SkeletonEvent(SkeletonBase& /*skeleton_base*/,
+                                             const std::string_view event_name,
+                                             std::unique_ptr<SkeletonEventBinding> binding)
+    : SkeletonEventBase{event_name, MakeInitializeSampleCallback(), std::move(binding)}, skeleton_event_mock_{nullptr}
+{
+}
+
+template <typename SampleDataType>
+Result<void> SkeletonEvent<SampleDataType>::Send(const EventType& sample_value)
+{
+    if (skeleton_event_mock_ != nullptr)
+    {
+        return skeleton_event_mock_->Send(sample_value);
+    }
+
+    if (!service_offered_flag_.IsSet())
+    {
+        score::mw::log::LogError("lola")
+            << "SkeletonEvent::Send with copy failed as Event has not yet been offered or has been stop offered";
+        return MakeUnexpected(ComErrc::kNotOffered);
+    }
+    auto tracing_handler = impl::tracing::CreateTracingSendCallback(
+        tracing_data_, memory::DataTypeSizeInfo{sizeof(SampleDataType), alignof(SampleDataType)}, *binding_);
+
+    auto allocate_result = binding_->Allocate(sample_allocatee_tracker_->Allocate());
+    if (!allocate_result.has_value())
+    {
+        score::mw::log::LogError("lola") << "SkeletonEvent::Send with copy failed to allocate a slot: "
+                                         << allocate_result.error().Message() << ": "
+                                         << allocate_result.error().UserMessage();
+        return MakeUnexpected(ComErrc::kBindingFailure);
+    }
+    auto allocated_slot = std::move(allocate_result).value();
+    *static_cast<SampleDataType*>(allocated_slot.Get()) = sample_value;
+
+    const auto send_result = binding_->Send(std::move(allocated_slot), std::move(tracing_handler));
+    if (!send_result.has_value())
+    {
+        score::mw::log::LogError("lola") << "SkeletonEvent::Send with copy failed: " << send_result.error().Message()
+                                         << ": " << send_result.error().UserMessage();
+        return MakeUnexpected(ComErrc::kBindingFailure);
+    }
+    return send_result;
+}
+
+template <typename SampleDataType>
+Result<void> SkeletonEvent<SampleDataType>::Send(SampleAllocateePtr<EventType> sample)
+{
+    if (skeleton_event_mock_ != nullptr)
+    {
+        return skeleton_event_mock_->Send(std::move(sample));
+    }
+
+    if (!service_offered_flag_.IsSet())
+    {
+        score::mw::log::LogError("lola")
+            << "SkeletonEvent::Send zero-copy failed as Event has not yet been offered or has been stop offered";
+        return MakeUnexpected(ComErrc::kNotOffered);
+    }
+
+    auto tracing_handler = impl::tracing::CreateTracingSendWithAllocateCallback(
+        tracing_data_, memory::DataTypeSizeInfo{sizeof(SampleDataType), alignof(SampleDataType)}, *binding_);
+
+    const auto send_result = binding_->Send(std::move(sample), std::move(tracing_handler));
+    if (!send_result.has_value())
+    {
+        score::mw::log::LogError("lola") << "SkeletonEvent::Send zero copy failed: " << send_result.error().Message()
+                                         << ": " << send_result.error().UserMessage();
+        return MakeUnexpected(ComErrc::kBindingFailure);
+    }
+    return send_result;
+}
+
+template <typename SampleDataType>
+Result<SampleAllocateePtr<SampleDataType>> SkeletonEvent<SampleDataType>::Allocate() noexcept
+{
+    if (skeleton_event_mock_ != nullptr)
+    {
+        return skeleton_event_mock_->Allocate();
+    }
+
+    if (!service_offered_flag_.IsSet())
+    {
+        score::mw::log::LogError("lola")
+            << "SkeletonEvent::Allocate failed as Event has not yet been offered or has been stop offered";
+        return MakeUnexpected(ComErrc::kNotOffered);
+    }
+
+    auto allocate_result = binding_->Allocate(sample_allocatee_tracker_->Allocate());
+    if (!allocate_result.has_value())
+    {
+        score::mw::log::LogError("lola") << "SkeletonEvent::Allocate failed: " << allocate_result.error().Message()
+                                         << ": " << allocate_result.error().UserMessage();
+        return MakeUnexpected(ComErrc::kBindingFailure);
+    }
+
+    // Currently the underlying (binding managed) slots are initialized once via call to binding_->PrepareOffer().
+    // If a slot gets reused later here (because we return in this Allocate() a slot, which had been used before, we
+    // return it in a state, where it was left in the last Send()!
+    return allocate_result;
+}
+
+template <typename SampleType>
+class SkeletonEventView
+{
+  public:
+    explicit SkeletonEventView(SkeletonEvent<SampleType>& skeleton_event) : skeleton_event_{skeleton_event} {}
+
+    SkeletonEventBinding* GetBinding() const noexcept
+    {
+        return skeleton_event_.binding_.get();
+    }
+
+    Result<SamplePtr<SampleType>> GetLatestSample(const QualityType& quality_type)
+    {
+        auto latest_sample_result = GetBinding()->GetLatestSample(quality_type);
+        if (!latest_sample_result.has_value())
+        {
+            return MakeUnexpected<SamplePtr<SampleType>>(latest_sample_result.error());
+        }
+        // Interim rebind: GetLatestSample() is (skeleton-side) already type-erased at the binding level and returns
+        // SamplePtr<void>, while this (proxy-facing) API still needs to hand out a concrete SamplePtr<SampleType>.
+        // See the doxygen comment on SamplePtr's rebind ctor (score/mw/com/impl/plumbing/sample_ptr.h) for context;
+        // this rebind step goes away once SamplePtr no longer needs to be a class template.
+        // See: SWP-281727
+        return SamplePtr<SampleType>{std::move(latest_sample_result).value()};
+    }
+
+  private:
+    SkeletonEvent<SampleType>& skeleton_event_;
+};
+
+}  // namespace score::mw::com::impl
+
+#endif  // SCORE_MW_COM_IMPL_SKELETON_EVENT_H

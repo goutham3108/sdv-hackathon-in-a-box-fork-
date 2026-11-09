@@ -1,3 +1,9 @@
+<!--
+Copyright (c) 2026 Contributors to the Eclipse Foundation
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
 # score_app: Vehicle High-Beam mw::com Showcase
 
 ## All-Signal Test App
@@ -93,7 +99,9 @@ source sdv-hack-demo/deploy/network.env.local
 2. Build host binaries (x86_64):
 
 ```bash
-bazel build --host_copt=-std=gnu11 //sdv-hack-demo/...
+cd inc_someip_gateway
+bazel build --config=sdv-demo --package_path="%workspace%:.." \
+  //sdv-hack-demo/...
 ```
 
 3. Run components in separate terminals (or background jobs):
@@ -101,19 +109,19 @@ bazel build --host_copt=-std=gnu11 //sdv-hack-demo/...
 Terminal A — bridge (vehicle-side):
 
 ```bash
-bazel run //sdv-hack-demo/bridge:udp_bridge
+bazel run --package_path="%workspace%:.." //sdv-hack-demo/bridge:udp_bridge
 ```
 
 Terminal B — remote sensor (simulated remote):
 
 ```bash
-bazel run //sdv-hack-demo/remote_app:remote_app
+bazel run --package_path="%workspace%:.." //sdv-hack-demo/remote_app:remote_app
 ```
 
 Terminal C — vehicle app (foreground):
 
 ```bash
-bazel run //sdv-hack-demo/vehicle_app:score_app
+bazel run --package_path="%workspace%:.." //sdv-hack-demo/vehicle_app:score_app
 ```
 
 If `bazel run` target names differ, locate the binaries under `bazel-bin/`

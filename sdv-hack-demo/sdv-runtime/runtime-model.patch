@@ -1,0 +1,11 @@
+diff --git a/Dockerfile b/Dockerfile
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -69,6 +69,7 @@ RUN cd vehicle_signal_specification/vss-tools/ \
+     && python3 vspec2json.py -I ../spec -u ../spec/units.yaml \
+         -o /build/overlays/diagnostics_extension.vspec \
+         -o /build/overlays/passenger_extension.vspec \
+         -o /build/overlays/occupant_extension.vspec \
++        -o /build/overlays/sdk_extensions.vspec \
+         ../spec/VehicleSignalSpecification.vspec vss.json
+ 

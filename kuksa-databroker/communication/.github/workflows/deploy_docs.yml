@@ -1,0 +1,155 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Workflow to build and deploy Sphinx documentation to GitHub Pages with versioning
+name: Deploy Documentation to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  # Intentionally no `paths:` filter here. The Sphinx build's dependency
+  # surface is a Bazel graph, not a fixed set of directories: e.g. the
+  # generated API docs depend on the *entire* //score/mw/com C++ target
+  # (via Doxygen/Breathe), and sphinx_docs_library sources can be added
+  # anywhere in the repo. Any path allowlist would either be incomplete
+  # (silently missing future doc-affecting changes, as happened before
+  # this fix) or so broad it approximates "no filter" anyway. Bazel's
+  # disk cache (configured below) keeps unaffected reruns cheap, so we
+  # let the build graph -- not a hand-maintained list -- decide relevance.
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Nightly Quality Jobs"]
+    types: [completed]
+
+permissions:
+  contents: write  # needed for uploading release assets
+  pages: write
+  id-token: write
+  actions: write    # needed to download artifacts from the nightly workflow_run and delete old bazel caches
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Bazel
+        uses: ./.github/actions/00_infrastructure/prepare_bazel_environment
+        with:
+          disk-cache: build_docs
+          ubuntu-snapshot-mirror-url: ${{ secrets.UBUNTU_SNAPSHOT_MIRROR_URL }}
+
+      - name: Determine version
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF}" == refs/heads/main ]]; then
+            echo "version=latest" >> "$GITHUB_OUTPUT"
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            # Feature branch or PR - deploy to preview/<branch-name>
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            BRANCH_NAME="${BRANCH_NAME//\//-}"
+            echo "version=preview/${BRANCH_NAME}" >> "$GITHUB_OUTPUT"
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+            echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and package Sphinx documentation
+        uses: ./.github/actions/10_docs/build_sphinx_package
+        with:
+          docs-version: ${{ steps.version.outputs.version }}
+          docs-base-url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          lobster-source-root: https://github.com/${{ github.repository }}/blob/main/
+          repository-name: ${{ github.event.repository.name }}
+          output-dir: docs_output
+          archive-name: docs-${{ steps.version.outputs.version }}.tar.gz
+
+      - name: Download previously released versions
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p publish
+          for tag in $(gh api "repos/${{ github.repository }}/releases" --paginate --jq '.[].tag_name' | grep '^v'); do
+            if [ "${tag}" = "${VERSION}" ]; then
+              continue
+            fi
+            if gh release download "${tag}" --pattern "docs-${tag}.tar.gz" --dir /tmp 2>/dev/null; then
+              mkdir -p "publish/${tag}"
+              tar xzf "/tmp/docs-${tag}.tar.gz" -C "publish/${tag}"
+              rm -f "/tmp/docs-${tag}.tar.gz"
+              echo "Restored ${tag} from release artifact"
+            else
+              echo "::warning::No docs artifact found for release ${tag}"
+            fi
+          done
+
+      - name: Assemble publish tree
+        if: github.event_name != 'pull_request'
+        run: |
+          bazel run --config=ci //docs/sphinx/utils:assemble_publish_tree -- \
+            --version     "${{ steps.version.outputs.version }}" \
+            --is-tag      "${{ steps.version.outputs.is_tag }}" \
+            --docs-output docs_output \
+            --publish-dir publish \
+            --repo-url    "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}" \
+            --root-index  docs/sphinx/_gh_pages/index.html
+
+      - name: Bundle quality reports into latest/
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash quality/scripts/bundle_quality_reports.sh \
+            "${{ github.event_name }}" \
+            "${{ github.event.workflow_run.id }}" \
+            "${{ github.repository }}"
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
+        with:
+          path: publish
+
+      - name: Print preview URL
+        if: github.event_name != 'pull_request'
+        run: |
+          REPO_URL="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}"
+          echo "::notice::Documentation deployed to: ${REPO_URL}/${{ steps.version.outputs.version }}/"
+
+  deploy-pages:
+    needs: build-docs
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5

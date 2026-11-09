@@ -1,0 +1,34 @@
+{
+  "name": "mw_com_provider Ubuntu 24.04",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "workspaceMount": "source=/home/pmj3kor/score,target=/home/pmj3kor/score,type=bind,consistency=cached",
+  "workspaceFolder": "/home/pmj3kor/score/mwcom_provider_M1/Inisetup/mw_com_provider",
+  "runArgs": [
+    "--shm-size=1g"
+  ],
+  "mounts": [
+    "source=/mnt/c,target=/mnt/c,type=bind,consistency=cached"
+  ],
+  "containerEnv": {
+    "SCORE_CONFIG_PATH": "/home/pmj3kor/score/mwcom_provider_M1/Inisetup/mw_com_provider/generated/vehicle_dynamics_lola_config.json",
+    "RUST_BACKTRACE": "1"
+  },
+  "postCreateCommand": "rustc --version && cargo --version && cargo test -p mw_com_provider --lib --no-run",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "rust-analyzer.cargo.features": [
+          "mock-transport",
+          "score-lola"
+        ],
+        "rust-analyzer.check.command": "check"
+      }
+    }
+  }
+}

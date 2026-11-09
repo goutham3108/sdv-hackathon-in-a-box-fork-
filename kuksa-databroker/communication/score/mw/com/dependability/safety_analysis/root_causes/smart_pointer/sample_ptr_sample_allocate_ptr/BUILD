@@ -1,0 +1,22 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+filegroup(
+    name = "sample_ptr_sample_allocate_ptr",
+    srcs = [
+        "does_not_free_resources_on_destruction_fta.puml",
+        "does_not_update_free_sample_count_correctly_fta.puml",
+        "returns_wrong_data_fta.puml",
+    ],
+    visibility = ["//score/mw/com/dependability:__subpackages__"],
+)

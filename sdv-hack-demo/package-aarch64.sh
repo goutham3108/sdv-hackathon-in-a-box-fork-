@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 gateway_root="${repo_root}/inc_someip_gateway"
 gateway_bazel_bin="${gateway_root}/bazel-out/aarch64-fastbuild/bin"
-demo_bazel_bin="${repo_root}/bazel-out/aarch64-fastbuild/bin"
+demo_bazel_bin="${gateway_bazel_bin}"
 dist_dir="${DIST_DIR:-${repo_root}/sdv-hack-demo/dist}"
+runtime_image_archive="${repo_root}/patch/sdv-runtime/sdv-runtime-mw-com.tar"
+if [[ ! -s "${runtime_image_archive}" ]]; then
+    printf 'ERROR: Prepared runtime image archive not found or empty: %s\nBuild and save the ARM64 runtime image before packaging.\n' \
+        "${runtime_image_archive}" >&2
+    exit 1
+fi
 kuksa_release_dir="${repo_root}/kuksa-databroker/target/aarch64-unknown-linux-gnu/release"
 communication_root="${COMMUNICATION_ROOT:-${repo_root}/communication}"
 communication_bazel_bin="$(cd "${communication_root}" && bazel info bazel-bin)"
@@ -100,6 +110,7 @@ cp -a "${repo_root}/sdv-hack-demo/deploy/network.env" "${vehicle_dir}/"
 cp -a "${repo_root}/sdv-hack-demo/deploy/network.env" "${remote_dir}/"
 cp -a "${repo_root}/sdv-hack-demo/signal_routes.json" "${vehicle_dir}/"
 cp -a "${repo_root}/sdv-hack-demo/signal_routes.json" "${remote_dir}/"
+cp "${runtime_image_archive}" "${vehicle_dir}/sdv-runtime-mw-com.tar"
 chmod +x "${vehicle_dir}/run/start-vehicle.sh" "${remote_dir}/run/start-remote.sh"
 chmod +x "${body_control_dir}/run/start-body-control.sh"
 

@@ -1,0 +1,184 @@
+<!--
+*******************************************************************************
+Copyright (c) 2026 Contributors to the Eclipse Foundation
+
+See the NOTICE file(s) distributed with this work for additional
+information regarding copyright ownership.
+
+This program and the accompanying materials are made available under the
+terms of the Apache License Version 2.0 which is available at
+https://www.apache.org/licenses/LICENSE-2.0
+
+SPDX-License-Identifier: Apache-2.0
+*******************************************************************************
+-->
+
+# SOME/IP Gateway
+
+The gateway is divided into a gateway daemon (gatewayd) which contains the network-independent logic (payload serialization, etc.) and the SOME/IP daemon (someipd) which binds to the concrete SOME/IP stack.
+The IPC interface between the gatewayd and the someipd serves as isolation boundary between ASIL and QM context and also allows to replace the network stack without touching the main gateway logic.
+
+![SOME/IP Gateway Architecture](docs/architecture/score-someip-car-window-overview.drawio.png)
+
+
+---
+
+## 🚀 Getting Started
+
+### Clone the Repository
+
+```sh
+git clone https://github.com/eclipse-score/inc_someip_gateway.git
+cd inc_someip_gateway
+```
+
+## Coverage report
+
+A code coverage report can be generated for the `score` package using the following command:
+
+```sh
+bazel coverage //... --build_tests_only
+bazel run @score_coverage//:generate_coverage_html
+```
+
+The HTML report is stored at `coverage_linux/index.html`. You can open it in a web browser to view the coverage results.
+
+## Quality pack
+
+Requirements traceability is produced by the documentation build. Run the tests
+first: the docs build reads `bazel-testlogs` to link each requirement to the
+tests that verify it.
+
+```sh
+bazel test //:unit_tests //:component_tests
+bazel run //:docs
+```
+
+This generates:
+
+- `_build/index.html` — documentation, showing the source-code and test
+  links on each requirement
+- `_build/needs.json` — the requirements model
+- `_build/metrics.json` — traceability metrics
+
+To print the traceability summary on the command line:
+
+```sh
+bazel run //:traceability_gate -- --metrics-json "$PWD/_build/metrics.json"
+```
+
+CI runs the same gate on every pull request with thresholds attached, and
+posts the summary as a sticky comment — see
+`.github/workflows/quality_pack_comment.yml`.
+
+### Start the daemons
+
+Start the daemons in this order:
+
+```sh
+bazel run //score/gatewayd:gatewayd_example
+```
+
+and in a separate terminal
+
+```sh
+bazel run //score/someipd:someipd_example
+```
+
+### Integration tests
+
+For current Bazel-based integration testing backends (Linux QEMU, and QNX QEMU) and defaults, see [quality/README.md](quality/README.md).
+
+
+## 📝 Configuration
+
+### Daemon Config Schema Validation
+
+Both the `gatewayd` and `someipd` daemons are configured using a single flatbuffer binary file generated from a JSON file. We provide a JSON schema which helps when editing the JSON file, and can also be used to validate it.
+
+#### Configuration Schema
+
+The JSON schema for the configuration is located at:
+
+```bash
+score/config/mw_someip_config.schema.json
+```
+
+This schema defines the expected properties, data types, and constraints for a valid JSON configuration file to be used for flatbuffer generation.
+
+#### Generate Configuration Binary
+
+To generate a someip config binary for your project, add the following to your `BUILD.bazel` file:
+
+```bash
+load("@score_someip_gateway//bazel/tools:someip_config.bzl", "generate_someip_config_bin")
+generate_someip_config_bin(
+    name = "<generation_rule_name>",
+    json = "//<package>:<path_to_config_json>",
+    output = "<path_to_config>/<name_of_config>.bin",
+)
+```
+
+You can then either use it as a runfile dependency for a run target:
+
+```bash
+generate_someip_config_bin(
+    name = "someipd_config",
+    ...
+)
+
+native_binary(
+    name = "gatewayd",
+    src = "@score_someip_gateway//score/gatewayd",
+    args = [
+        "--configuration",
+        "$(rootpath :someipd_config)",
+        "--service_instance_manifest",
+        "$(rootpath etc/mw_com_config.json)",
+    ],
+    data = [
+        "etc/mw_com_config.json",
+        ":someipd_config",
+    ],
+)
+```
+
+Or you can manually generate the flatbuffer binary with the following command:
+
+```bash
+bazel build //:someipd_config # if the macro has been added to root BUILD.bazel
+```
+
+On success you can retrieve the generated flatbuffer binary from `bazel-bin/`. Check the success message for the exact path.
+
+
+#### Configuration Validation
+
+When using the `generate_someip_config_bin` macro a validation test is automatically generated to validate the schema json against the schema. This can be executed via:
+
+```bash
+bazel test //:<generation_rule_name>_test # if the macro has been added to root BUILD.bazel
+```
+
+
+## QNX Build
+
+Either use a `.netrc` file to provide the login credentials for your myQNX account or provide them as environment variables `SCORE_QNX_USER` and `SCORE_QNX_PASSWORD`.
+You can use an extension like `pomdtr.secrets` to manage the secrets or inject it via environment.
+
+The QNX toolchain is automatically downloaded when building for QNX.
+If the automatic download via bazel fails for some reason you can also provide the manually downloaded file in a directory which you then pass via the `--distdir` command line option.
+
+Make sure your qnx license file is available as `/opt/score_qnx/license/licenses` (e.g. by copying it from your `~/.qnx/license/licenses`)
+
+If you use a license server then add the following in in your `~/.bazelrc`:
+
+    common --action_env=QNXLM_LICENSE_FILE=<port>@<license_server_host>
+
+> :warning: Getting license from server not yet supported within devcontainer. Need to figure out how to adjust user & hostname properly.
+
+
+## Static code analysis
+
+clang-tidy and ruff are used for static code analysis. clang-tidy is used for C/C++ code and ruff is used for Python code.
+We use the same code and interface like [Eclipse SCORE Communication](https://github.com/eclipse-score/communication/blob/5c22c564320afa3d37a1129b827f79c93367edbd/quality/quality.md#clang-tidy).

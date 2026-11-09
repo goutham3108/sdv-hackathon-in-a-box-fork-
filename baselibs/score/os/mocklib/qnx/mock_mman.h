@@ -1,0 +1,102 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_LIB_OS_MOCKLIB_QNX_MOCK_MMAN_H
+#define SCORE_LIB_OS_MOCKLIB_QNX_MOCK_MMAN_H
+
+#include "score/os/errno.h"
+#include "score/os/qnx/mman.h"
+
+#include <cstddef>
+#include <cstdint>
+
+#include <gmock/gmock.h>
+
+namespace score
+{
+namespace os
+{
+namespace qnx
+{
+class MmanQnxMock : public MmanQnx
+{
+  public:
+    MOCK_METHOD((score::cpp::expected<void*, Error>),
+                mmap,
+                (void* addr,
+                 const std::size_t length,
+                 const std::int32_t protection,
+                 const std::int32_t flags,
+                 const std::int32_t fd,
+                 const std::int64_t offset),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected<void*, Error>),
+                mmap64,
+                (void* addr,
+                 const std::size_t length,
+                 const std::int32_t protection,
+                 const std::int32_t flags,
+                 const std::int32_t fd,
+                 const std::int64_t offset),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected_blank<Error>),
+                munmap,
+                (void* addr, const std::size_t length),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected<uintptr_t, Error>),
+                mmap_device_io,
+                (const size_t length, const uint64_t address),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected<int, Error>),
+                munmap_device_io,
+                (const uintptr_t address, const size_t length),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected<std::int32_t, Error>),
+                shm_open,
+                (const char*, const std::int32_t, mode_t mode),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected<std::int32_t, Error>),
+                shm_open_handle,
+                (const shm_handle_t handle, const int flags),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected<std::int32_t, Error>),
+                shm_create_handle,
+                (std::int32_t, pid_t, const std::int32_t, shm_handle_t*, std::uint32_t),
+                (const, noexcept, override));
+
+    MOCK_METHOD((score::cpp::expected<std::int32_t, Error>),
+                shm_ctl,
+                (std::int32_t fd, const std::int32_t flags, const std::uint64_t paddr, const std::uint64_t size),
+                (const, noexcept, override));
+    MOCK_METHOD(
+        (score::cpp::expected_blank<Error>),
+        mem_offset,
+        (const void* addr, const std::int32_t fd, const std::size_t length, off_t* offset, std::size_t* contig_len),
+        (const, noexcept, override));
+    MOCK_METHOD(
+        (score::cpp::expected_blank<Error>),
+        mem_offset64,
+        (const void* addr, const std::int32_t fd, const std::size_t length, off64_t* offset, std::size_t* contig_len),
+        (const, noexcept, override));
+};
+}  // namespace qnx
+}  // namespace os
+}  // namespace score
+
+#endif  // SCORE_LIB_OS_MOCKLIB_QNX_MOCK_MMAN_H

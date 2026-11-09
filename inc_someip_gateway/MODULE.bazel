@@ -289,26 +289,20 @@ bazel_dep(name = "score_docs_as_code", version = "8.4.0")
 # ============================================================================
 # Communication Framework
 # ============================================================================
-# Pinned on purpose, NOT upstream's 0.5.0: gatewayd/someipd, the demo apps and KUKSA (which links the
-# checked-in communication/ folder) must use the same LoLa version. See the SDV demo README.
+# Gateway, demo apps, and KUKSA must share the same LoLa shared-memory ABI.
 bazel_dep(name = "score_communication", version = "0.3.0")
-git_override(
+local_path_override(
     module_name = "score_communication",
-    commit = "d609be928f146f96ef9d4f81abb4c06bc51f1135",
-    remote = "https://github.com/eclipse-score/communication.git",
+    path = "../communication",
 )
 
 # ============================================================================
 # Base Libraries
 # ============================================================================
-# Pinned on purpose, NOT upstream's 0.2.14: baselibs provides the shared-memory primitives under LoLa.
-bazel_dep(name = "score_baselibs", version = "0.2.12")
-single_version_override(
+bazel_dep(name = "score_baselibs", version = "0.2.14")
+local_path_override(
     module_name = "score_baselibs",
-    patch_strip = 1,
-    # Patch baselibs with a QNX8 workaround for poll
-    # until a fix is provided by the QNX SDP
-    patches = ["//third_party/score_baselibs:restore_qnx8_poll_workaround.patch"],
+    path = "../baselibs",
 )
 
 # Upgrade grpc-java to 1.70.0 for compatibility with newer grpc (1.70.1).

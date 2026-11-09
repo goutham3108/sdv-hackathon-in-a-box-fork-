@@ -1,3 +1,7 @@
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 """Check body signal registrations across the deployed transport configuration."""
 
 import unittest
@@ -7,6 +11,17 @@ from gateway_provider_codegen import gateway_provider_documents, gateway_provide
 
 
 class SignalConfigurationTest(unittest.TestCase):
+    def test_sdk_types_do_not_change_wire_contract(self):
+        mappings = next(iter(gateway_provider_documents(ROOT).values()))["mappings"]
+        types = {mapping["vss_path"]: mapping["datatype"] for mapping in mappings}
+        assert types["Vehicle.Speed"] == "float"
+        assert types["Vehicle.OBD.OilTemperature"] == "float"
+        assert types["Vehicle.Body.Lights.Brake.IsActive"] == "string"
+        signals = read_json(ROOT / "sdv-hack-demo/config/body_signals.json")["signals"]
+        wire_types = {signal["apiName"]: signal["datatype"] for signal in signals}
+        assert wire_types["Vehicle.OBD.OilTemperature"] == "int16"
+        assert wire_types["Vehicle.Body.Lights.Brake.IsActive"] == "boolean"
+
     def test_gateway_provider_uses_existing_transport_contract(self):
         document = next(iter(gateway_provider_documents(ROOT).values()))
         assert len(document["mappings"]) == 45

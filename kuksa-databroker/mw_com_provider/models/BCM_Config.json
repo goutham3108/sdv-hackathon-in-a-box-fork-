@@ -1,0 +1,328 @@
+{
+  "namespaces": [
+    {
+      "name": "vehicle",
+      "structs": [],
+      "interfaces": [
+        {
+          "name": "BodyControlModuleService",
+          "events": [
+            {
+              "name": "horn_is_active",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3001, "path": "Vehicle.Body.Horn.IsActive", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "low_beam_is_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3002, "path": "Vehicle.Body.Lights.Beam.Low.IsOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "high_beam_is_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3003, "path": "Vehicle.Body.Lights.Beam.High.IsOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "high_beam_switch_is_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3004, "path": "Vehicle.Body.Lights.IsHighBeamSwitchOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "parking_lights_are_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3005, "path": "Vehicle.Body.Lights.Parking.IsOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "running_lights_are_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3006, "path": "Vehicle.Body.Lights.Running.IsOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_fog_lights_are_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3007, "path": "Vehicle.Body.Lights.Fog.Front.IsOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_fog_lights_are_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3008, "path": "Vehicle.Body.Lights.Fog.Rear.IsOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "hazard_lights_are_signaling",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3009, "path": "Vehicle.Body.Lights.Hazard.IsSignaling", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "left_indicator_is_signaling",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3010, "path": "Vehicle.Body.Lights.DirectionIndicator.Left.IsSignaling", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "right_indicator_is_signaling",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3011, "path": "Vehicle.Body.Lights.DirectionIndicator.Right.IsSignaling", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "brake_lights_are_active",
+              "datatype": "string",
+              "sample_size": 16,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3012, "path": "Vehicle.Body.Lights.Brake.IsActive", "datatype": "string", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "hood_is_open",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3013, "path": "Vehicle.Body.Hood.IsOpen", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_trunk_is_open",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3014, "path": "Vehicle.Body.Trunk.Rear.IsOpen", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_trunk_is_locked",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3015, "path": "Vehicle.Body.Trunk.Rear.IsLocked", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_trunk_position",
+              "datatype": "uint8",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3016, "path": "Vehicle.Body.Trunk.Rear.Position", "datatype": "uint8", "unit": "percent", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "driver_mirror_is_folded",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3017, "path": "Vehicle.Body.Mirrors.DriverSide.IsFolded", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "passenger_mirror_is_folded",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3018, "path": "Vehicle.Body.Mirrors.PassengerSide.IsFolded", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "driver_mirror_heating_is_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3019, "path": "Vehicle.Body.Mirrors.DriverSide.IsHeatingOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "passenger_mirror_heating_is_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3020, "path": "Vehicle.Body.Mirrors.PassengerSide.IsHeatingOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_wiper_mode",
+              "datatype": "string",
+              "sample_size": 16,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3021, "path": "Vehicle.Body.Windshield.Front.Wiping.Mode", "datatype": "string", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_wiper_intensity",
+              "datatype": "uint8",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3022, "path": "Vehicle.Body.Windshield.Front.Wiping.Intensity", "datatype": "uint8", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_washer_fluid_level",
+              "datatype": "uint8",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3023, "path": "Vehicle.Body.Windshield.Front.WasherFluid.Level", "datatype": "uint8", "unit": "percent", "required_quality": "valid", "direction": "datapoint", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_washer_fluid_is_low",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3024, "path": "Vehicle.Body.Windshield.Front.WasherFluid.IsLevelLow", "datatype": "boolean", "required_quality": "valid", "direction": "datapoint", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rain_intensity",
+              "datatype": "uint8",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3025, "path": "Vehicle.Body.Raindetection.Intensity", "datatype": "uint8", "unit": "percent", "required_quality": "valid", "direction": "datapoint", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_windshield_heating_is_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3026, "path": "Vehicle.Body.Windshield.Front.IsHeatingOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_windshield_heating_is_on",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3027, "path": "Vehicle.Body.Windshield.Rear.IsHeatingOn", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "driver_door_is_locked",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3028, "path": "Vehicle.Cabin.Door.Row1.DriverSide.IsLocked", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "driver_door_is_open",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3029, "path": "Vehicle.Cabin.Door.Row1.DriverSide.IsOpen", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "driver_door_window_position",
+              "datatype": "uint8",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3030, "path": "Vehicle.Cabin.Door.Row1.DriverSide.Window.Position", "datatype": "uint8", "unit": "percent", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "driver_door_child_lock_is_active",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3031, "path": "Vehicle.Cabin.Door.Row1.DriverSide.IsChildLockActive", "datatype": "boolean", "required_quality": "valid", "direction": "datapoint", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_passenger_door_is_locked",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3032, "path": "Vehicle.Cabin.Door.Row1.PassengerSide.IsLocked", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_passenger_door_is_open",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3033, "path": "Vehicle.Cabin.Door.Row1.PassengerSide.IsOpen", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "front_passenger_door_window_position",
+              "datatype": "uint8",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3034, "path": "Vehicle.Cabin.Door.Row1.PassengerSide.Window.Position", "datatype": "uint8", "unit": "percent", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_driver_door_is_locked",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3035, "path": "Vehicle.Cabin.Door.Row2.DriverSide.IsLocked", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_driver_door_is_open",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3036, "path": "Vehicle.Cabin.Door.Row2.DriverSide.IsOpen", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_passenger_door_is_locked",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3037, "path": "Vehicle.Cabin.Door.Row2.PassengerSide.IsLocked", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "rear_passenger_door_is_open",
+              "datatype": "boolean",
+              "sample_size": 1,
+              "sample_alignment": 1,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3038, "path": "Vehicle.Cabin.Door.Row2.PassengerSide.IsOpen", "datatype": "boolean", "required_quality": "valid", "direction": "actuator", "cycle_time_ms": 100 } }
+            },
+            {
+              "name": "vehicle_speed",
+              "datatype": "float",
+              "sample_size": 4,
+              "sample_alignment": 4,
+              "has_serialized_format": false,
+              "provider": { "service": "BodyControlModuleService", "instance": "standard_vehicle", "vss": { "signal_id": 3039, "path": "Vehicle.Speed", "datatype": "float", "unit": "km/h", "required_quality": "valid", "direction": "datapoint", "cycle_time_ms": 100 } }
+            }
+          ]
+        }
+      ],
+      "namespaces": []
+    }
+  ]
+}

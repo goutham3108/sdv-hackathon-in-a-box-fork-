@@ -166,7 +166,7 @@
         {
             "signal_id": 11,
             "vss_path": "Vehicle.Body.Lights.Brake.IsActive",
-            "datatype": "bool",
+            "datatype": "string",
             "service": "/body_control_module_rx",
             "instance": "network_rx",
             "member": "brake_lights_state",
@@ -627,7 +627,7 @@
         {
             "signal_id": 39,
             "vss_path": "Vehicle.OBD.OilTemperature",
-            "datatype": "int16",
+            "datatype": "float",
             "service": "/body_control_module_rx",
             "instance": "network_rx",
             "member": "oil_temperature_state",
@@ -700,7 +700,7 @@
         {
             "signal_id": 45,
             "vss_path": "Vehicle.Speed",
-            "datatype": "double",
+            "datatype": "float",
             "service": "VehicleDynamicsService",
             "instance": "network_rx",
             "member": "speed",

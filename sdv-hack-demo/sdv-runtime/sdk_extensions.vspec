@@ -1,0 +1,27 @@
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+Vehicle.Body.Trunk.Rear.Position:
+  type: actuator
+  datatype: uint8
+  min: 0
+  max: 100
+  unit: percent
+  description: Rear trunk opening position reported by the demo.
+
+Vehicle.Body.Mirrors.DriverSide.IsFolded:
+  type: actuator
+  datatype: boolean
+  description: Driver-side mirror folded state.
+
+Vehicle.Body.Mirrors.PassengerSide.IsFolded:
+  type: actuator
+  datatype: boolean
+  description: Passenger-side mirror folded state.
+
+Vehicle.Powertrain.TractionBattery.CellVoltage.CellVoltages:
+  type: sensor
+  datatype: float[]
+  unit: V
+  description: Individual cell voltages reported by the demo.

@@ -1,0 +1,209 @@
+@startuml
+
+skinparam linetype ortho
+
+class "BaseInterruptiblePromise<typename Value>" as BaseInterruptiblePromise {
+  - future_retrieved_: std::atomic_flag
+  # state_: std::shared_ptr<InterruptibleState<Value>>
+  --
+  + BaseInterruptiblePromise()
+  + BaseInterruptiblePromise(other: BaseInterruptiblePromise<Value>&&) noexcept
+  + operator=(other: BaseInterruptiblePromise<Value>&&) noexcept: BaseInterruptiblePromise<Value>&
+  - BaseInterruptiblePromise(BaseInterruptiblePromise<Value> const&) noexcept
+  - BaseInterruptiblePromise<Value>& operator=(BaseInterruptiblePromise<Value> const&) noexcept
+  + GetInterruptibleFuture() noexcept: score::cpp::expected<InterruptibleFuture<Value>, Error>
+  + SetError(error: score::result::Error) noexcept: score::cpp::expected_blank<Error>
+}
+
+together {
+class "InterruptiblePromise<typename Value>" as InterruptiblePromise {
+  - value_: score::Result<Value>
+  --
+  + SetValue(value: Value&&) noexcept: score::cpp::expected<Error>
+  + SetValue(value: Value const&) noexcept: score::cpp::expected<Error>
+}
+
+class "InterruptiblePromise<typename Value&>" as InterruptiblePromiseRef {
+  - value_: score::Result<std::reference_wrapper<Value>>
+  --
+  + SetValue(value: Value&) noexcept: score::cpp::expected<Error>
+}
+
+class "InterruptiblePromise<void>" as InterruptiblePromiseVoid {
+  --
+  + SetValue() noexcept: score::cpp::expected<Error>
+}
+}
+
+enum "State" as State1 <<enum>> {
+  +kUnset
+  +kReady
+  +kBroken
+}
+
+class "BaseInterruptibleState<typename Lockable, typename CV>" as BaseInterruptibleState {
+  - state_: std::atomic<State>
+  - state_mutex_: mutable Lockable
+  - state_conditional_variable_: CV
+  --
+  + BaseInterruptibleState()
+  + BaseInterruptibleState(cv: CV&)
+  - BaseInterruptibleState(BaseInterruptibleState const&)
+  - operator=(BaseInterruptibleState const&): BaseInterruptibleState&
+  + BaseInterruptibleState(BaseInterruptibleState&&)
+  + operator=(BaseInterruptibleState&&) noexcept: BaseInterruptibleState&
+  + SetStateOnce(State state) noexcept: void
+  + GetState() const noexcept: State
+  - WaitByCallback(callback: score::cpp::callback<bool(std::unique_lock<std::mutex>&,
+  score::cpp::callback<bool()>)>, stop_token: score::cpp::stop_token const&) const noexcept:
+  score::cpp::expected_blank<Error>
+  + Wait(stop_token: score::cpp::stop_token const&) const noexcept: score::cpp::expected_blank<Error>
+  + WaitFor(stop_token: score::cpp::stop_token const&,
+  rel_time: const std::chrono::duration<Representation, Period>&) const noexcept:
+  score::cpp::expected_blank<Error>
+  + WaitUntil(stop_token: score::cpp::stop_token const&,
+  abs_time: std::chrono::time_point<Clock, Duration> const&) const noexcept:
+  score::cpp::expected_blank<Error>
+}
+
+together {
+class "InterruptibleState<typename Value>" as InterruptibleState {
+  - value_: score::Result<Value>
+  --
+  + SetValue(value: Value&&) noexcept: void
+  + SetValue(value: const Value&) noexcept: void
+  + SetError(error: score::result::Error) noexcept: void
+  + GetValue() noexcept: score::Result<Value>&
+}
+
+
+class "InterruptibleState<typename Value&>" as InterruptibleStateRef {
+  - value_: score::Result<std::reference_wrapper<Value>>
+  --
+  + SetValue(value: Value&) noexcept: void
+  + SetError(error: score::result::Error) noexcept: void
+  + GetValue() noexcept: score::Result<std::reference_wrapper<Value>>&
+}
+
+class "InterruptibleState<void>" as InterruptibleStateVoid {
+  --
+  + SetError(error: score::result::Error) noexcept: void
+  + GetValue() noexcept: score::Result<void>&
+}
+}
+
+class "BaseInterruptibleFuture<typename Value>" as BaseInterruptibleFuture {
+  # state_ptr_: std::shared_ptr<InterruptibleState<Value>>
+  --
+  + BaseInterruptibleFuture() noexcept
+  # BaseInterruptibleFuture(other_state_ptr: std::shared_ptr<InterruptibleState<Value>>) noexcept
+  + Valid() const noexcept: bool
+  + Wait(stop_token: score::cpp::stop_token const&) const noexcept: score::cpp::expected_blank<Error>
+  + WaitFor(stop_token: score::cpp::stop_token const&,
+  rel_time: const std::chrono::duration<Representation, Period>&) const noexcept:
+  score::cpp::expected_blank<Error>
+}
+
+together {
+class "InterruptibleFuture<typename Value>" as InterruptibleFuture {
+  + InterruptibleFuture() noexcept
+  - InterruptibleFuture(InterruptibleFuture<Value> const&) noexcept
+  - operator=(InterruptibleFuture<Value> const&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(InterruptibleFuture<Value>&& other) noexcept
+  + operator=(InterruptibleFuture<Value>&&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(state_ptr: std::shared_ptr<InterruptibleState<Value>>)
+  + Get(score::cpp::stop_token const& stop_token) noexcept: score::Result<Value>
+  + Share(): InterruptibleSharedFuture<Value>
+}
+
+class "InterruptibleFuture<typename Value&>" as InterruptibleFutureRef {
+  + InterruptibleFuture() noexcept
+  - InterruptibleFuture(InterruptibleFuture<Value&> const&) noexcept
+  - operator=(InterruptibleFuture<Value&> const&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(InterruptibleFuture<Value&>&& other) noexcept
+  + operator=(InterruptibleFuture<Value&>&&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(state_ptr: std::shared_ptr<InterruptibleState<Value&>>)
+  + Get(score::cpp::stop_token const& stop_token) noexcept: score::Result<std::reference_wrapper<Value>>
+  + Share(): InterruptibleSharedFuture<Value&>
+}
+
+class "InterruptibleFuture<void>" as InterruptibleFutureVoid {
+  + InterruptibleFuture() noexcept
+  - InterruptibleFuture(InterruptibleFuture<void> const&) noexcept
+  - operator=(InterruptibleFuture<void> const&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(InterruptibleFuture<void>&& other) noexcept
+  + operator=(InterruptibleFuture<void>&&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(state_ptr: std::shared_ptr<InterruptibleState<void>>)
+  + Get(score::cpp::stop_token const& stop_token) noexcept: score::Result<void>
+  + Share(): InterruptibleSharedFuture<void>
+}
+}
+
+together {
+class "InterruptibleSharedFuture<typename Value>" as InterruptibleSharedFuture {
+  + InterruptibleFuture() noexcept
+  + InterruptibleFuture(InterruptibleFuture<Value> const&) noexcept
+  + operator=(InterruptibleFuture<Value> const&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(InterruptibleFuture<Value>&& other) noexcept
+  + operator=(InterruptibleFuture<Value>&&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(state_ptr: std::shared_ptr<InterruptibleState<Value>>)
+  + Get(score::cpp::stop_token const& stop_token) noexcept: score::Result<std::reference_wrapper<Value>>
+}
+
+class "InterruptibleSharedFuture<typename Value&>" as InterruptibleSharedFutureRef {
+  + InterruptibleFuture() noexcept
+  + InterruptibleFuture(InterruptibleFuture<Value&> const&) noexcept
+  + operator=(InterruptibleFuture<Value&> const&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(InterruptibleFuture<Value&>&& other) noexcept
+  + operator=(InterruptibleFuture<Value&>&&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(state_ptr: std::shared_ptr<InterruptibleState<Value&>>)
+  + Get(score::cpp::stop_token const& stop_token) noexcept: score::Result<std::reference_wrapper<Value>>
+}
+
+class "InterruptibleSharedFuture<void>" as InterruptibleSharedFutureVoid {
+  + InterruptibleFuture() noexcept
+  + InterruptibleFuture(InterruptibleFuture<void> const&) noexcept
+  + operator=(InterruptibleFuture<void> const&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(InterruptibleFuture<void>&& other) noexcept
+  + operator=(InterruptibleFuture<void>&&) noexcept: InterruptibleFuture&
+  + InterruptibleFuture(state_ptr: std::shared_ptr<InterruptibleState<void>>)
+  + Get(score::cpp::stop_token const& stop_token) noexcept: score::Result<void>
+}
+}
+
+BaseInterruptibleState -u-> State1 : <<uses>>
+InterruptibleState -u-|> BaseInterruptibleState : Lockable = std::mutex, CV = InterruptibleConditionalVariable
+InterruptibleStateRef -u-|> BaseInterruptibleState : Value = Value&, Lockable = std::mutex, CV = InterruptibleConditionalVariable
+InterruptibleStateVoid -u-|> BaseInterruptibleState : Value = void, Lockable = std::mutex, CV = InterruptibleConditionalVariable
+
+InterruptiblePromise -d-|> BaseInterruptiblePromise
+InterruptiblePromiseRef -d-|> BaseInterruptiblePromise : Value = Value&
+InterruptiblePromiseVoid -d-|> BaseInterruptiblePromise : Value = void
+
+InterruptiblePromise .u.> InterruptibleState : <<creates>
+InterruptiblePromise o-u- InterruptibleState
+InterruptiblePromiseRef .u.> InterruptibleStateRef : <<creates>
+InterruptiblePromiseRef o-u- InterruptibleStateRef
+InterruptiblePromiseVoid .u.> InterruptibleStateVoid : <<creates>
+InterruptiblePromiseVoid o-u- InterruptibleStateVoid
+
+InterruptibleFuture -u-|> BaseInterruptibleFuture
+InterruptibleFutureRef -u-|> BaseInterruptibleFuture : Value = Value&
+InterruptibleFutureVoid -u-|> BaseInterruptibleFuture : Value = void
+
+InterruptibleSharedFuture -u-|> BaseInterruptibleFuture
+InterruptibleSharedFutureRef -u-|> BaseInterruptibleFuture : Value = Value&
+InterruptibleSharedFutureVoid -u-|> BaseInterruptibleFuture : Value = void
+
+InterruptibleFuture ..> InterruptibleSharedFuture : <<creates>>
+InterruptibleFutureRef ..> InterruptibleSharedFutureRef : <<creates>>
+InterruptibleFutureVoid ..> InterruptibleSharedFutureVoid : <<creates>>
+
+InterruptibleFuture o- InterruptibleState
+InterruptibleFutureRef o- InterruptibleStateRef
+InterruptibleFutureVoid o- InterruptibleStateVoid
+InterruptibleSharedFuture o- InterruptibleState
+InterruptibleSharedFutureRef o- InterruptibleStateRef
+InterruptibleSharedFutureVoid o- InterruptibleStateVoid
+
+@enduml
