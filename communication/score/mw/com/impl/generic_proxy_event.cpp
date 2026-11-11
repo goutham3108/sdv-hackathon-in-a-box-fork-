@@ -1,0 +1,56 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/generic_proxy_event.h"
+
+#include "score/mw/com/impl/plumbing/proxy_event_binding_factory.h"
+
+#include <score/assert.hpp>
+
+namespace score::mw::com::impl
+{
+
+GenericProxyEvent::GenericProxyEvent(ProxyBase& parent, const std::string_view event_name)
+    : ProxyEventBase{event_name,
+                     GenericProxyEventBindingFactory::Create(parent.GetHandle(),
+                                                             ProxyBaseView{parent}.GetBinding(),
+                                                             event_name,
+                                                             ServiceElementType::EVENT)
+                         .and_then([](std::unique_ptr<GenericProxyEventBinding> binding) {
+                             return Result<std::unique_ptr<ProxyEventBinding>>{std::move(binding)};
+                         })}
+{
+}
+
+GenericProxyEvent::GenericProxyEvent(const std::string_view event_name,
+                                     std::unique_ptr<GenericProxyEventBinding> proxy_binding)
+    : ProxyEventBase{event_name, std::move(proxy_binding)}
+{
+}
+
+memory::DataTypeSizeInfo GenericProxyEvent::GetDataTypeSizeInfo() const
+{
+    auto* const proxy_event_binding = dynamic_cast<GenericProxyEventBinding*>(binding_.get());
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(proxy_event_binding != nullptr,
+                                                "Downcast to GenericProxyEventBinding failed!");
+    return proxy_event_binding->GetDataTypeSizeInfo();
+}
+
+bool GenericProxyEvent::HasSerializedFormat() const noexcept
+{
+    auto* const proxy_event_binding = dynamic_cast<GenericProxyEventBinding*>(binding_.get());
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(proxy_event_binding != nullptr,
+                                                "Downcast to GenericProxyEventBinding failed!");
+    return proxy_event_binding->HasSerializedFormat();
+}
+
+}  // namespace score::mw::com::impl

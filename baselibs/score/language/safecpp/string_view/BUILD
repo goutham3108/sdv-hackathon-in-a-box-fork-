@@ -1,0 +1,113 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@score_baselibs//:bazel/unit_tests.bzl", "cc_gtest_unit_test")
+load("@score_baselibs//score/language/safecpp:toolchain_features.bzl", "COMPILER_WARNING_FEATURES")
+
+cc_library(
+    name = "null_termination_violation_policies",
+    srcs = ["null_termination_violation_policies.cpp"],
+    hdrs = ["null_termination_violation_policies.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//visibility:public",  # platform_only
+    ],
+)
+
+cc_gtest_unit_test(
+    name = "null_termination_violation_policies_test",
+    srcs = [
+        "null_termination_violation_policies_test.cpp",
+    ],
+    features = COMPILER_WARNING_FEATURES + [
+        "throws_upon_exception",
+    ],
+    deps = [
+        ":null_termination_violation_policies",
+    ],
+)
+
+cc_library(
+    name = "null_termination_check",
+    srcs = ["null_termination_check.cpp"],
+    hdrs = ["null_termination_check.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//visibility:public",  # platform_only
+    ],
+    deps = [
+        ":null_termination_violation_policies",
+        ":zstring_view",
+        "@score_baselibs//score/language/safecpp/string_view/details:zspan",
+    ],
+)
+
+cc_gtest_unit_test(
+    name = "null_termination_check_test",
+    srcs = [
+        "null_termination_check_test.cpp",
+    ],
+    features = COMPILER_WARNING_FEATURES + [
+        "throws_upon_exception",
+    ],
+    deps = [
+        ":null_termination_check",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "char_traits_wrapper",
+    srcs = ["char_traits_wrapper.cpp"],
+    hdrs = ["char_traits_wrapper.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//visibility:public",  # platform_only
+    ],
+    deps = [
+        "@score_baselibs//score/quality/compiler_warnings",
+    ],
+)
+
+cc_library(
+    name = "zstring_view",
+    srcs = ["zstring_view.cpp"],
+    hdrs = ["zstring_view.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//visibility:public",  # platform_only
+    ],
+    deps = [
+        "@score_baselibs//score/language/safecpp/string_view:char_traits_wrapper",
+        "@score_baselibs//score/language/safecpp/string_view/details:zspan",
+    ],
+)
+
+cc_gtest_unit_test(
+    name = "zstring_view_test",
+    srcs = [
+        "zstring_view_test.cpp",
+    ],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":zstring_view",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/mw/log:backend_stub_testutil",
+        "@score_baselibs//score/mw/log:frontend",
+    ],
+)

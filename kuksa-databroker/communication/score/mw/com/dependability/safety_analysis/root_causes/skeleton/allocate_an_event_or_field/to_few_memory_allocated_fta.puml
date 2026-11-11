@@ -1,0 +1,48 @@
+' *******************************************************************************
+' Copyright (c) 2026 Contributors to the Eclipse Foundation
+'
+' See the NOTICE file(s) distributed with this work for additional
+' information regarding copyright ownership.
+'
+' This program and the accompanying materials are made available under the
+' terms of the Apache License Version 2.0 which is available at
+' https://www.apache.org/licenses/LICENSE-2.0
+'
+' SPDX-License-Identifier: Apache-2.0
+' *******************************************************************************
+
+@startuml
+
+!include fta_metamodel.puml
+
+$FailureMode("To few memory allocated", "Communication.TooFewMemoryAllocated")
+
+$OrGate("Gate1", "Communication.TooFewMemoryAllocated")
+$IntermediateEvent("Wrong slot-type choosen", "Event2", "Gate1")
+$RootCause("Mapping from actual EventID to Event-Type incorrect", "MappingFromActualEventidToEventTypeIncorrect", "Event2")
+$IntermediateEvent("A slot cannot be allocated", "Event3", "Gate1")
+$OrGate("Gate2", "Event3")
+$IntermediateEvent("To few slots allocated", "Event12", "Gate2")
+$OrGate("Gate4", "Event12")
+$RootCause("Literaly wrong number of slots reserved", "LiteralyWrongNumberOfSlotsReserved", "Gate4")
+$IntermediateEvent("Configuration issue", "Event17", "Gate4")
+$TransferInGate("Transfer1", "Event17")
+$IntermediateEvent("Proxy violates contract", "Event11", "Gate2")
+$OrGate("Gate6", "Event11")
+$RootCause("Holds more SamplePtr than announced", "HoldsMoreSampleptrThanAnnounced", "Gate6")
+$RootCause("Holds more SamplePtr than configured", "HoldsMoreSampleptrThanConfigured", "Gate6")
+$IntermediateEvent("Slot allocation logic broken", "Event8", "Gate2")
+$OrGate("Gate3", "Event8")
+$RootCause("Consumer uses an older slot, than he already has blocked in the previous access", "ConsumerUsesAnOlderSlotThanHeAlreadyHasBlockedInThePreviousAccess", "Gate3")
+$RootCause("Retry-logic not bullet proof", "RetryLogicNotBulletProof", "Gate3")
+$RootCause("Issue in Lock-free Sychronization", "IssueInLockFreeSychronization", "Gate3")
+$RootCause("More than one SampleAllocateePtr in parallel", "MoreThanOneSampleallocateeptrInParallel", "Gate2")
+$IntermediateEvent("Dynamic Memory for containers in slots cannot be allocated", "Event1", "Gate1")
+$OrGate("Gate5", "Event1")
+$RootCause("Allocate claims too few memory", "AllocateClaimsTooFewMemory", "Gate5")
+$IntermediateEvent("Configuration broken", "Event9", "Gate5")
+$TransferInGate("Transfer2", "Event9")
+$RootCause("Necessary size calculation retreives wrong value", "NecessarySizeCalculationRetrievesWrongValue", "Gate5")
+$RootCause("Shared memory truncation fails", "SharedMemoryTruncationFails", "Gate5")
+
+@enduml

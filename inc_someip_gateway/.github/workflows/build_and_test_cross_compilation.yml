@@ -1,0 +1,50 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Workflow configuration for S-CORE CI - Bazel Build & Test module
+# This workflow runs Bazel build and test when triggered by specific pull request events.
+
+name: Build & Test module (cross compilation)
+on:
+  workflow_call:
+jobs:
+  build_and_test_cross_compilation:
+    strategy:
+      fail-fast: false
+      matrix:
+        bazel-config: ["x86_64-linux", "aarch64-linux"]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: eclipse-score/more-disk-space@v1
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Create Bazel output base directory
+        run: |
+          sudo mkdir -p /mnt/.bazel
+          sudo chown -R $USER:$USER /mnt/.bazel
+      - name: Create config indicator file
+        run: echo "${{ matrix.bazel-config }}" > .bazel_config
+      - name: Setup Bazel
+        uses: eclipse-score/cicd-actions/setup-bazel-cache@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+        with:
+          unique-cache-name: ${{ github.job }}-${{ matrix.bazel-config }}
+      - name: Allow linux-sandbox
+        uses: eclipse-score/cicd-actions/unblock-user-namespace-for-linux-sandbox@212bbf86267e9381da9d2daf962d12f6feafbc90 # v0.0.2
+      - run: df -h
+      - name: Bazel build targets
+        # TODO: build all targets ( //... ) once python toolchain issue is resolved.
+        run: |
+          bazel build --config ${{ matrix.bazel-config }} //score/... //tests/...
+      - run: df -h
+        if: always()
+        # TODO Run tests on QEMU

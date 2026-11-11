@@ -1,0 +1,93 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_CONFIGURATION_SERVICE_TYPE_DEPLOYMENT_H
+#define SCORE_MW_COM_IMPL_CONFIGURATION_SERVICE_TYPE_DEPLOYMENT_H
+
+#include "score/mw/com/impl/configuration/lola_service_type_deployment.h"
+#include "score/mw/com/impl/configuration/someip_service_type_deployment.h"
+
+#include "score/json/json_parser.h"
+#include "score/mw/log/logging.h"
+
+#include <algorithm>
+#include <cstdint>
+#include <exception>
+#include <string>
+#include <string_view>
+#include <variant>
+
+namespace score::mw::com::impl
+{
+
+class ServiceTypeDeployment
+{
+  public:
+    using BindingInformation = std::variant<LolaServiceTypeDeployment, SomeIpServiceTypeDeployment, score::cpp::blank>;
+
+    explicit ServiceTypeDeployment(const score::json::Object& json_object);
+
+    explicit ServiceTypeDeployment(BindingInformation binding);
+
+    score::json::Object Serialize() const;
+    std::string_view ToHashString() const noexcept;
+
+    // This variable has no invariance that needs to be conserved and is needed to be both accessed and set by the user
+    // thus would require a getter and setter that do not conserve any other invariants. In such a case direct access
+    // is justified.
+    // coverity[autosar_cpp14_a0_1_1_violation]
+    // coverity[autosar_cpp14_m11_0_1_violation] same justification as the above supperssion
+    BindingInformation binding_info_;
+
+    /**
+     * \brief The size of the hash string returned by ToHashString()
+     *
+     * The size is the max size of the hash string returned by ToHashString() from all the bindings in
+     * BindingInformation plus 1 for the index of the binding type in the variant, BindingInformation.
+     */
+    // Variable is used in a test case -> so this line is tested and prepared for easier reuse
+    // coverity[autosar_cpp14_a0_1_1_violation]
+    constexpr static std::size_t hashStringSize{
+        std::max(LolaServiceTypeDeployment::hashStringSize, SomeIpServiceTypeDeployment::hashStringSize) + 1U};
+
+    /// \brief Bumped to 2 when SomeIpServiceTypeDeployment was inserted into BindingInformation before
+    /// score::cpp::blank: that shifted the alternative indices which Serialize() writes as bindingInfoIndex, so
+    /// version 1 payloads must not be read back with this layout.
+    constexpr static std::uint32_t serializationVersion = 2U;
+
+  private:
+    /**
+     * \brief Stringified format of this ServiceTypeDeployment which can be used for hashing.
+     */
+    std::string hash_string_;
+};
+
+bool operator==(const ServiceTypeDeployment& lhs, const ServiceTypeDeployment& rhs);
+
+template <typename ServiceTypeDeploymentBinding>
+const ServiceTypeDeploymentBinding& GetServiceTypeDeploymentBinding(
+    const ServiceTypeDeployment& service_type_deployment)
+{
+    const auto* service_type_deployment_binding =
+        std::get_if<ServiceTypeDeploymentBinding>(&service_type_deployment.binding_info_);
+    if (service_type_deployment_binding == nullptr)
+    {
+        ::score::mw::log::LogFatal("lola")
+            << "Trying to get binding from ServiceTypeDeployment which contains a different binding. Terminating.";
+        std::terminate();
+    }
+    return *service_type_deployment_binding;
+}
+
+}  // namespace score::mw::com::impl
+
+#endif  // SCORE_MW_COM_IMPL_CONFIGURATION_SERVICE_TYPE_DEPLOYMENT_H

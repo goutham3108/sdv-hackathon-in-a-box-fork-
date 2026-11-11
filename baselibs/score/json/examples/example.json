@@ -1,0 +1,9 @@
+{
+    "first": "first_value",
+    "second": "second_value",
+    "key": 1,
+    "foo": false,
+    "my_array": [
+        1, "two", null, 3.1415
+    ]
+}

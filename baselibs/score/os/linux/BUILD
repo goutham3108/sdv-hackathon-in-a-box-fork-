@@ -1,0 +1,77 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("@score_baselibs//score/os:toolchain_features.bzl", "COMPILER_WARNING_FEATURES")
+
+exports_files([
+    "capability.h",
+    "capability.cpp",
+])
+
+cc_library(
+    name = "linux_header",
+    hdrs = [
+        "endmntent.h",
+        "getmntent.h",
+        "ifaddrs.h",
+        "linuxsched.h",
+        "pthread.h",
+        "setmntent.h",
+        "shm.h",
+        "statfs.h",
+        "sysinfo.h",
+        "timerfd.h",
+        "timex.h",
+        "unistd.h",
+    ],
+    defines = ["ALLOW_QM"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = [
+        "@score_baselibs//score/os:__subpackages__",
+        "@score_baselibs//score/os/mocklib/linux:__subpackages__",
+    ],
+)
+
+cc_library(
+    name = "linux",
+    srcs = [
+        "endmntent.cpp",
+        "getmntent.cpp",
+        "ifaddrs.cpp",
+        "linuxsched.cpp",
+        "pthread.cpp",
+        "setmntent.cpp",
+        "shm.cpp",
+        "statfs.cpp",
+        "sysinfo.cpp",
+        "timerfd.cpp",
+        "timex.cpp",
+        "unistd.cpp",
+    ],
+    features = COMPILER_WARNING_FEATURES,
+    linkopts = [
+        "-lrt",
+        "-lpthread",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = [
+        # Coverage scope root (//tools/coverage, eclipse-score/baselibs#512).
+        "//tools/coverage:__pkg__",
+        "@score_baselibs//score/os:__subpackages__",
+    ],
+    deps = [
+        ":linux_header",
+        "//third_party/libcap2",
+    ],
+)

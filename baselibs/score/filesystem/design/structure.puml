@@ -1,0 +1,245 @@
+@startuml
+
+skinparam linetype ortho
+
+interface "filesystem::IFilesystemFactory" as IFilesystemFactory {
+  + CreateInstance(): Filesystem
+}
+
+class "filesystem::Filesystem" as Filesystem {
+  + standard:std::shared_ptr<IStandardFilesystem>
+  + utils:std::shared_ptr<IFileUtils>
+  + streams:std::shared_ptr<IFileFactory>
+}
+
+class "filesystem::FilesystemFactory" as FilesystemFactory
+
+class "filesystem::FilesystemFactoryMock" as FilesystemFactoryMock #yellow
+
+class "filesystem::FilesystemFactoryFake" as FilesystemFactoryFake #yellow {
+  + GetStandard(): StandardFilesystemFake&
+  + GetUtils(): FileUtilsMock&
+  + GetStreams(): FileFactoryFake&
+
+}
+
+class "filesystem::FilesystemFactoryMockObjects" as FilesystemFactoryMockObjects #yellow {
+  + GetStandard(): StandardFilesystemMock&
+  + GetUtils(): FileUtilsMock&
+  + GetStreams(): FileFactoryMock&
+}
+
+class "os::ObjectSeam" as ObjectSeam #yellow
+
+class "filesystem::Path" as Path {
+  Note: Implement C++17 std::filesystem::path
+}
+
+enum "filesystem::CopyOptions" as CopyOptions {
+  kSkipExisting
+  ...
+}
+
+interface "filesystem::IStandardFileSystem" as IStandardFileSystem {
+  + Exists(const Path&): bool
+  + CopyFile(from: const Path&, to: const Path&): Result<void>
+  + CopyFile(from: const Path&, to: const Path&, copy_options): Result<void>
+  + CreateDirectory(const Path&): Result<void>
+  + CreateDirectories(const Path&): Result<void>
+  + LastWriteTime(): Result<FileTime>
+  + Permissions(const Path&, Perms, PermOptions): Result<void>
+  + Remove(const Path&): Result<void>
+  + RemoveAll(const Path&): Result<void>
+  + Status(const Path&): Result<FileStatus>
+  + TempDirectoryPath(): Result<Path>
+  --
+  Note: Implement std::filesystem free functions
+}
+
+enum "filesystem::Perms" as Perms
+class "score::Result<ReturnValue>" as Result
+entity "result::ErrorCode" as ErrorCode
+enum "filesystem::ErrorCode" as FilesystemErrorCode
+class "result::ErrorDomain" as ErrorDomain
+class "filesystem::ErrorDomain" as FilesystemErrorDomain
+enum "filesystem::PermOptions" as PermOptions
+
+class "filesystem::FileStatus" as FileStatus {
+  Note: Implement C++17 std::filesystem::file_status
+}
+
+class "filesystem::StandardFileSystem" as StandardFileSystem {
+  Note: In future only a small wrapper around C++17 std::filesystem
+}
+
+class "filesystem::StandardFileSystemMock" as StandardFileSystemMock #yellow
+
+class "filesystem::StandardFileSystemFake" as StandardFileSystemFake #yellow {
+  Implements in-memory filesystem
+}
+
+class "os::DirentFake" as DirentFake #yellow
+class "os::MockDirent" as MockDirent #yellow
+class "os::Dirent" as Dirent
+
+class "filesystem::DirectoryIterator" as DirectoryIterator {
+  + operator++(): DirectoryIterator&
+  + operator*(): DirectoryEntry&
+  + operator->(): DirectoryEntry*
+  + operator==(const RecursiveDirectoryIterator& other): bool
+  + operator!=(const RecursiveDirectoryIterator& other): bool
+  + HasValue(): bool
+  + Error(): os::Error
+}
+
+class "filesystem::RecursiveDirectoryIterator" as RecursiveDirectoryIterator {
+  + operator++(): RecursiveDirectoryIterator&
+  + operator*(): DirectoryEntry&
+  + operator->(): DirectoryEntry*
+  + operator==(const RecursiveDirectoryIterator& other): bool
+  + operator!=(const RecursiveDirectoryIterator& other): bool
+  + HasValue(): bool
+  + Error(): os::Error
+}
+
+class "os::ObjectSeam" as ObjectSeam1 #yellow
+
+interface "filesystem::IFileFactory" as IFileFactory {
+  + Open(Path, std::ios_base::openmode = ios_base::in|ios_base::out):
+  Result<std::unique_ptr<std::iostream>>
+  + AtomicUpdate(Path, openmode, flags): Result<unique_ptr<FileStream>>
+  --
+}
+
+class "filesystem::FileFactory" as FileFactory{
+  Note: A small wrapper around std::filestream
+  + Open(Path, openmode): Result<unique_ptr<iostream>>
+  + AtomicUpdate(Path, openmode, flags): Result<unique_ptr<FileStream>>
+}
+
+class "filesystem::FileFactoryMock" as FileFactoryMock #yellow
+
+class "filesystem::FileFactoryFake" as FileFactoryFake #yellow {
+  - collection_:std::reference_wrapper<IStringStreamCollection>
+  Note: Fake class
+}
+
+class "filesystem::FileStream" as FileStream {
+  + Close(): Result<void>
+}
+
+class "filesystem::details::FileStreamImpl" as FileStreamImpl
+
+class "filesystem::details::StdioFileBuf" as StdioFileBuf {
+  + Close(): Result<void>
+}
+
+class "filesystem::details::AtomicFileBuf" as AtomicFileBuf {
+  + Close(): Result<void>
+}
+
+class "filesystem::details::StdioFilebufBase" as StdioFilebufBase {
+  + fd(): int
+}
+
+interface "filesystem::IStringStreamCollection" as IStringStreamCollection #Yellow{
+  --
+  + OpenStringStream(const Path& path): score::Result<std::reference_wrapper<std::stringstream>>
+  --
+  Note: Helper class
+}
+
+class "filesystem::SimpleStringStreamCollection" as SimpleStringStreamCollection #yellow {
+  Note: Helper class (map: Path->stream)
+}
+
+class "filesystem::BadStringStreamCollection" as BadStringStreamCollection #yellow
+
+class "os::ObjectSeam" as ObjectSeam2 #yellow
+
+interface "filesystem::IFileUtils" as IFileUtils {
+  + ChangeGroup(Path, group_name): Result<void>
+  + CreateDirectory(Path, permissions): Result<void>
+  + CreateDirectories(Path, permissions): Result<void>
+  + CreateTmpFileName(): Result<Path>
+  + FileContentsAreIdentical(Path, Path): Result<bool>
+  + SyncDirectory(Path): Result<void>
+  + ValidateGroup(Path, group_name): Result<bool>
+  --
+  Note: Implements auxiliary functions not reflected in std::filesystem
+}
+
+class "filesystem::FileUtils" as FileUtils
+class "filesystem::FileUtilsMock" as FileUtilsMock #yellow
+
+IFilesystemFactory -l- Filesystem
+FilesystemFactory -u-|> IFilesystemFactory
+FilesystemFactoryMock -u-|> IFilesystemFactory
+FilesystemFactoryMockObjects -u-|> FilesystemFactoryMock
+FilesystemFactoryFake -u-|> FilesystemFactoryMock
+
+IStandardFileSystem --u-|> ObjectSeam
+
+IStandardFileSystem -r- CopyOptions
+IStandardFileSystem -r- Perms
+IStandardFileSystem -u- Path
+IStandardFileSystem -u- FileStatus
+IStandardFileSystem -l- PermOptions
+IStandardFileSystem -l- Result
+ErrorCode -u-o Result
+ErrorDomain -u-o Result
+FilesystemErrorCode -u-|> ErrorCode
+FilesystemErrorDomain -u-|> ErrorDomain
+
+
+StandardFileSystemMock -u-|> IStandardFileSystem
+StandardFileSystem -u-|> IStandardFileSystem
+
+DirentFake --d-|> MockDirent
+MockDirent -d-|> Dirent
+
+DirentFake -l-* StandardFileSystemFake
+
+StandardFileSystemFake --u-|> StandardFileSystemMock
+DirectoryIterator ..> Dirent
+RecursiveDirectoryIterator ..> Dirent
+DirectoryIterator -r-* RecursiveDirectoryIterator
+IFileFactory -u-|> ObjectSeam1
+FileFactoryMock --u--|> IFileFactory
+FileFactory --u--|> IFileFactory
+FileFactoryFake -u-|> FileFactoryMock
+IStringStreamCollection -r-|> FileFactoryFake
+SimpleStringStreamCollection -u-|> IStringStreamCollection
+BadStringStreamCollection -u-|> IStringStreamCollection
+
+FileFactory ..> FileStream
+FileStreamImpl -u-|> FileStream
+FileStreamImpl o-- StdioFileBuf : "uses Buf"
+AtomicFileBuf -u-|> StdioFileBuf
+StdioFileBuf -u-|> StdioFilebufBase
+
+StandardFileSystemFake --|> IStringStreamCollection
+
+IFileUtils -u-|> ObjectSeam2
+
+FileUtilsMock -u-|> IFileUtils
+FileUtils -u-|> IFileUtils
+
+IFileUtils ..> IStandardFileSystem
+IFileUtils ..> IFileFactory
+
+IFileUtils --d[hidden]-> Filesystem
+
+note as N1
+Yellow color means that the class is used only for testing with Google tests.
+end note
+
+note right of IFileFactory
+iostream should be a good fit for
+nearly all use-cases.
+
+If in future we figure out for code-reuse
+reasons that we need another abstraction level,
+it can be easily added.
+end note
+@enduml

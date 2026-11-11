@@ -1,0 +1,175 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@bazel_tools_python//quality:defs.bzl", "py_pytest")
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+load("//bazel/tools:json_schema_validator.bzl", "validate_json_schema_test")
+load("//bazel/tools:someip_config.bzl", "generate_someip_config_bin")
+
+config_setting(
+    name = "perf_tests",
+    define_values = {"perf_tests": "true"},
+)
+
+config_setting(
+    name = "flamegraphs",
+    define_values = {"flamegraphs": "true"},
+)
+
+sh_binary(
+    name = "setup_network",
+    srcs = ["setup_network.sh"],
+    target_compatible_with = ["@platforms//os:linux"],
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "all_files",
+    srcs = glob(
+        ["**"],
+        exclude = [
+            "**/__pycache__/**",
+            "**/*.pyc",
+        ],
+    ),
+    visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "flamegraph_scripts",
+    srcs = select({
+        ":flamegraphs": [
+            "@flamegraph//:flamegraph.pl",
+            "@flamegraph//:stackcollapse-perf.pl",
+        ],
+        "//conditions:default": [],
+    }),
+)
+
+cc_library(
+    name = "echo_service",
+    hdrs = ["echo_service.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//score/serializer:pre_serialized_data",
+        "@score_communication//score/mw/com",
+    ],
+)
+
+cc_binary(
+    name = "echo_server",
+    srcs = ["echo_server.cpp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":echo_service",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_communication//score/mw/com",
+    ],
+)
+
+cc_binary(
+    name = "ipc_benchmarks",
+    srcs = ["ipc_benchmarks.cpp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":echo_service",
+        "//score/someip",
+        "@google_benchmark//:benchmark",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_communication//score/mw/com",
+    ],
+)
+
+generate_someip_config_bin(
+    name = "bench_config_file",
+    json = "config/bench/someip_config.json",
+    output = "bench_someip_config.bin",
+)
+
+generate_someip_config_bin(
+    name = "echo_config_file",
+    json = "config/echo/someip_config.json",
+    output = "echo_someip_config.bin",
+)
+
+py_pytest(
+    name = "e2e_benchmarks",
+    size = "large",
+    srcs = [
+        "e2e_benchmark_runner.py",
+        "nodes.py",
+        "test_e2e_benchmarks.py",
+    ],
+    data = [
+        ":bench_config_file",
+        ":echo_config_file",
+        ":echo_server",
+        ":flamegraph_scripts",
+        ":ipc_benchmarks",
+        "//score/gatewayd",
+        "//score/serializer:null_serializer",
+        "//score/someipd",
+    ] + glob(["config/**/*.json"]),
+    target_compatible_with = select({
+        ":perf_tests": ["@platforms//os:linux"],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "@score_someip_gateway_pip//pytest",
+    ],
+)
+
+py_pytest(
+    name = "e2e_benchmarks_profiling",
+    size = "large",
+    srcs = [
+        "e2e_benchmark_runner.py",
+        "nodes.py",
+        "test_e2e_benchmarks_profiling.py",
+    ],
+    data = [
+        ":bench_config_file",
+        ":echo_config_file",
+        ":echo_server",
+        ":flamegraph_scripts",
+        ":ipc_benchmarks",
+        "//score/gatewayd",
+        "//score/serializer:null_serializer",
+        "//score/someipd",
+    ] + glob(["config/**/*.json"]),
+    target_compatible_with = select({
+        ":perf_tests": ["@platforms//os:linux"],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    deps = [
+        "@score_someip_gateway_pip//pytest",
+    ],
+)
+
+validate_json_schema_test(
+    name = "bench_mw_com_config_schema_valid",
+    size = "small",
+    json = "config/bench/mw_com_config.json",
+    schema = "@score_communication//score/mw/com:config_schema",
+    tags = ["lint"],
+)
+
+validate_json_schema_test(
+    name = "echo_mw_com_config_schema_valid",
+    size = "small",
+    json = "config/echo/mw_com_config.json",
+    schema = "@score_communication//score/mw/com:config_schema",
+    tags = ["lint"],
+)

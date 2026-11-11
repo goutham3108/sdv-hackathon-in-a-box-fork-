@@ -1,0 +1,141 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@score_docs_as_code//:docs.bzl", "docs")
+load(":qemu.bzl", "qemu_aarch64")
+
+exports_files([".clang-tidy"])
+
+# Exported for //tools, which hosts the score_tooling-backed copyright checker.
+exports_files(
+    ["cr_checker_exclusion"],
+    visibility = ["//tools:__pkg__"],
+)
+
+docs(
+    bundles = [
+        {
+            "bundle": "//score/bitmanipulation:docs",
+            "mount_at": "baselibs/components/bitmanipulation",
+        },
+        {
+            "bundle": "//score/concurrency:docs",
+            "mount_at": "baselibs/components/concurrency",
+        },
+        {
+            "bundle": "//score/containers:docs",
+            "mount_at": "baselibs/components/containers",
+        },
+        {
+            "bundle": "//score/containers_rust:docs",
+            "mount_at": "baselibs/components/containers_rust",
+        },
+        {
+            "bundle": "//score/filesystem:docs",
+            "mount_at": "baselibs/components/filesystem",
+        },
+        {
+            "bundle": "//score/flatbuffers:docs",
+            "mount_at": "baselibs/components/flatbuffers",
+        },
+        {
+            "bundle": "//score/hash:docs",
+            "mount_at": "baselibs/components/hash",
+        },
+        {
+            "bundle": "//score/json:docs",
+            "mount_at": "baselibs/components/json",
+        },
+        {
+            "bundle": "//score/language:docs",
+            "mount_at": "baselibs/components/language",
+        },
+        {
+            "bundle": "//score/language/futurecpp:docs",
+            "mount_at": "baselibs/components/language/futurecpp",
+        },
+        {
+            "bundle": "//score/language/safecpp:docs",
+            "mount_at": "baselibs/components/language/safecpp",
+        },
+        {
+            "bundle": "//score/memory:docs",
+            "mount_at": "baselibs/components/memory",
+        },
+        {
+            "bundle": "//score/mw/log:docs",
+            "mount_at": "baselibs/components/mw_log",
+        },
+        {
+            "bundle": "//score/os:docs",
+            "mount_at": "baselibs/components/os",
+        },
+        {
+            "bundle": "//score/result:docs",
+            "mount_at": "baselibs/components/result",
+        },
+        {
+            "bundle": "//score/static_reflection_with_serialization:docs",
+            "mount_at": "baselibs/components/static_reflection_with_serialization",
+        },
+        {
+            "bundle": "//score/utils:docs",
+            "mount_at": "baselibs/components/utils",
+        },
+    ],
+    external_needs = [
+        "@score_platform//:needs_json_file",
+        "@score_process_description//:needs_json_file",
+    ],
+    source_dir = "docs",
+)
+
+# Generate `rust_project.json`.
+# Required for `rust-analyzer` support.
+alias(
+    name = "generate_rust_project",
+    actual = "@rules_rust//tools/rust_analyzer:gen_rust_project",
+    target_compatible_with = ["@platforms//os:linux"],
+)
+
+# Needed for Dash tool to check python dependency licenses.
+# This is a workaround to filter out local packages from the Cargo.lock file.
+# The tool is intended for third-party content.
+# Consumed by //tools's dash_license_checker.
+genrule(
+    name = "filtered_cargo_lock",
+    srcs = ["Cargo.lock"],
+    outs = ["Cargo.lock.filtered"],
+    cmd = """
+    awk '
+    BEGIN { skip = 0; data = "" }
+    /^\\[\\[package\\]\\]/ {
+        if (data != "" && !skip) print data;
+        skip = 1;
+        data = $$0;
+        next;
+    }
+    data != "" { data = data "\\n" $$0 }
+    # any package that has a "source = " line will not be skipped.
+    /^source = / { skip = 0 }
+    END { if (data != "" && !skip) print data }
+    ' $(location Cargo.lock) > $@
+    """,
+    visibility = ["//tools:__pkg__"],
+)
+
+# The LLVM coverage pipeline (//tools/coverage, eclipse-score/baselibs#512)
+# resolves the workspace root through MODULE.bazel at report time.
+exports_files(["MODULE.bazel"])
+
+qemu_aarch64()

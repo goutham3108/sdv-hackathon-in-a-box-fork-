@@ -1,0 +1,9 @@
+diff --git a/score/kvs/kvsvalue.hpp b/score/kvs/kvsvalue.hpp
+--- a/score/kvs/kvsvalue.hpp
++++ b/score/kvs/kvsvalue.hpp
+@@ -15,4 +15,5 @@
+ #define SCORE_LIB_KVS_KVSVALUE_HPP
+ 
++#include <cstdint>
+ #include <memory>
+ #include <optional>

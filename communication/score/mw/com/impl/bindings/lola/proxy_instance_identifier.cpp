@@ -1,0 +1,40 @@
+/********************************************************************************
+ * Copyright (c) 2026 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/proxy_instance_identifier.h"
+
+#include "score/language/safecpp/safe_math/safe_math.h"
+
+namespace score::mw::com::impl::lola
+{
+
+bool operator==(const ProxyInstanceIdentifier& lhs, const ProxyInstanceIdentifier& rhs) noexcept
+{
+    return (safe_math::CmpEqual(lhs.application_id, rhs.application_id) &&
+            safe_math::CmpEqual(lhs.proxy_instance_counter, rhs.proxy_instance_counter));
+}
+
+std::ostream& operator<<(std::ostream& stream, const ProxyInstanceIdentifier& value)
+{
+    stream << "Application ID: " << value.application_id
+           << ". Proxy Instance Counter: " << value.proxy_instance_counter;
+    return stream;
+}
+
+mw::log::LogStream& operator<<(score::mw::log::LogStream& stream, const ProxyInstanceIdentifier& value) noexcept
+{
+    stream << "Application ID: " << value.application_id
+           << ". Proxy Instance Counter: " << value.proxy_instance_counter;
+    return stream;
+}
+
+}  // namespace score::mw::com::impl::lola

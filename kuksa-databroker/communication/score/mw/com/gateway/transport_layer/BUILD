@@ -1,0 +1,91 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//quality/unit_testing:unit_testing.bzl", "cc_unit_test")
+load("//score/mw:common_features.bzl", "COMPILER_WARNING_FEATURES")
+
+package(
+    default_visibility = ["//score/mw/com/gateway:__subpackages__"],
+)
+
+cc_library(
+    name = "transport",
+    srcs = ["transport.cpp"],
+    hdrs = ["transport.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = [
+        "//score/mw/com/gateway:__subpackages__",
+    ],
+    deps = [
+        "//score/mw/com:types",
+        "//score/mw/com/impl:service_element_type",
+        "@score_baselibs//score/result",
+    ],
+)
+
+cc_library(
+    name = "transport_error",
+    srcs = ["transport_error.cpp"],
+    hdrs = ["transport_error.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = [
+        "//score/mw/com/gateway:__subpackages__",
+    ],
+    deps = ["@score_baselibs//score/result"],
+)
+
+cc_library(
+    name = "transport_factory",
+    srcs = ["transport_factory.cpp"],
+    hdrs = ["transport_factory.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = [
+        "//score/mw/com/gateway:__subpackages__",
+    ],
+    deps = [
+        ":transport",
+        "//score/memory/shared",
+        "//score/mw/com/gateway/gateway_application:gateway_core",
+        "//score/mw/com/gateway/transport_layer/qemu:qemu_hypervisor_transport",
+        "//score/mw/com/gateway/transport_layer/qemu/configuration:qemu_transport_config_parser",
+        "//score/mw/com/gateway/transport_layer/qemu/ivshmem:ivshmem_bar_discovery",
+        "//score/mw/com/gateway/transport_layer/qemu/ivshmem:ivshmem_typed_memory_provider",
+        "//score/mw/com/gateway/transport_layer/sample:bidirectional_transport",
+        "//score/mw/com/gateway/transport_layer/sample:sample_hypervisor_transport",
+        "//score/mw/com/gateway/transport_layer/sample/configuration:hypervisor_socket_configuration",
+        "//score/mw/com/gateway/transport_layer/sample/configuration:sample_transport_config_parser",
+    ],
+)
+
+cc_library(
+    name = "transport_mock",
+    srcs = ["transport_mock.cpp"],
+    hdrs = ["transport_mock.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = ["//score/mw/com/gateway:__subpackages__"],
+    deps = [
+        ":transport",
+        "@googletest//:gtest",
+    ],
+)
+
+cc_unit_test(
+    name = "transport_error_test",
+    srcs = ["transport_error_test.cpp"],
+    features = COMPILER_WARNING_FEATURES,
+    deps = [
+        ":transport_error",
+        "@score_baselibs//score/result",
+    ],
+)

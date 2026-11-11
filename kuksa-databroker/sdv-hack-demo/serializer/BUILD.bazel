@@ -1,0 +1,28 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_shared_library.bzl", "cc_shared_library")
+
+# Plugin loaded by gatewayd as score_com_serializer.so. It forwards to the gateway's own
+# serializer (score_com_serializer_base.so, below) after mapping the demo's Rx type names.
+cc_library(
+    name = "serializer_shim_impl",
+    srcs = ["serializer_shim.cpp"],
+    linkopts = ["-ldl"],
+    deps = ["@score_someip_gateway//score/serializer:interface"],
+)
+
+cc_shared_library(
+    name = "serializer_shim",
+    additional_linker_inputs = ["exported_symbols.lds"],
+    shared_lib_name = "score_com_serializer.so",
+    user_link_flags = ["-Wl,--version-script=$(location exported_symbols.lds)"],
+    visibility = ["//visibility:public"],
+    deps = [":serializer_shim_impl"],
+)
+
+genrule(
+    name = "base_serializer",
+    srcs = ["@score_someip_gateway//score/serializer:null_serializer"],
+    outs = ["score_com_serializer_base.so"],
+    cmd = "cp $(SRCS) $@",
+    visibility = ["//visibility:public"],
+)

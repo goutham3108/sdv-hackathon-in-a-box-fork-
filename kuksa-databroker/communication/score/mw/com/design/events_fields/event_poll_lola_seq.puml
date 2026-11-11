@@ -1,0 +1,112 @@
+@startuml event_poll_lola_seq
+title "Sequence Update Event and Access via Polling"
+hide footbox
+
+participant "<u>:Process</u>\nmw::com application (server)" as Process1
+participant "<u>:lola::skeleton</u>" as skeleton
+participant "<u>:lola::SkeletonEvent</u>" as SkeletonEvent
+participant "ProviderEventDataControlLocalView\n(wraps <<shm>> EventDataControl)" as ProviderLocalView
+participant "<shared memory>\n<u>:lola::EventDataStorage</u>" as EventDataStorage
+participant "ConsumerEventDataControlLocalView\n(wraps <<shm>> EventDataControl)" as ConsumerLocalView
+participant "<u>:lola::ProxyEvent</u>" as ProxyEvent
+participant "<u>:lola::proxy</u>" as proxy
+participant "<u>:lola::SlotDecrementer</u>" as SlotDecrementer
+participant "<u>:lola::SamplePtr</u>" as SamplePtr
+participant "<u>:Process</u>\nmw::com application (client)" as Process2
+
+activate Process1
+|||
+group LoLa skeleton CREATE in skeleton_create_offer_seq
+    Process1 -[#white]> skeleton
+    activate skeleton
+    |||
+end
+
+group LoLa skeleton EVENT CREATE in skeleton_create_offer_seq
+    |||
+    create SkeletonEvent
+    skeleton -[#white]> SkeletonEvent
+    |||
+end
+
+group LoLa skeleton OFFER in skeleton_create_offer_seq
+    |||
+    create ProviderLocalView
+    Process1 -[#white]> ProviderLocalView
+    note right of ProviderLocalView
+      Created by SkeletonEventCommon::PrepareOfferCommon().
+      Holds a raw span into shared-memory EventDataControl.
+    end note
+    create ConsumerLocalView
+    Process1 -[#white]> ConsumerLocalView
+    activate SkeletonEvent
+    create EventDataStorage
+    Process1 -[#white]> EventDataStorage
+end
+|||
+deactivate SkeletonEvent
+|||
+deactivate skeleton
+|||
+deactivate Process1
+
+group Proxy CREATE
+    |||
+    create proxy
+    Process2 -[#white]> proxy
+    activate Process2
+    create ProxyEvent
+    Process2 -[#white]> ProxyEvent
+end
+
+Process2 -> ProxyEvent: Subscribe(maxSamples)
+deactivate Process2
+activate ProxyEvent
+ref over SkeletonEvent, ProxyEvent: Message passing SubscribeEvent in\nlola_msg_pass_subscribe_seq
+ProxyEvent --> Process2: Subscribe Result (fulfill Future)
+activate Process2
+deactivate ProxyEvent
+deactivate Process2
+
+Process1 -[#white]> Process1
+activate Process1
+Process1 -> SkeletonEvent: Update(sample)
+activate SkeletonEvent
+SkeletonEvent -> SkeletonEvent: AllocateSlot()
+SkeletonEvent -> ProviderLocalView: std::atomic::compare_exchange\nalgo on state_slots
+activate ProviderLocalView
+deactivate ProviderLocalView
+SkeletonEvent -> SkeletonEvent: return: SlotIndex
+SkeletonEvent -> EventDataStorage: Update event_slots[SlotIndex]
+activate EventDataStorage
+deactivate EventDataStorage
+SkeletonEvent -> ProviderLocalView: Update timestamp state_slots[SlotIndex]
+activate ProviderLocalView
+deactivate ProviderLocalView
+ref over SkeletonEvent, ProxyEvent: Message passing NotifyEvent in\nlola_msg_pass_notify_seq
+Process1 <-- SkeletonEvent: return
+deactivate SkeletonEvent
+Process1 -[#white]> Process1
+deactivate Process1
+
+activate Process2
+Process2 -> ProxyEvent: GetNewSamples(maxSamples)
+activate ProxyEvent
+loop until maxSamples reached or no new samples available
+  ProxyEvent -> ConsumerLocalView: referenceNextEvent(last_samples_check_timestamp)
+  activate ConsumerLocalView
+  ProxyEvent <-- ConsumerLocalView: return std::optional<EventSlotIndexType>
+  deactivate ConsumerLocalView
+  create SlotDecrementer
+  ProxyEvent -> SlotDecrementer: Create(slot_index, ConsumerEventDataControlLocalView&)
+  create SamplePtr
+  ProxyEvent -> SamplePtr: Create(SlotDecrementer)
+  Process2 <- ProxyEvent: Callable F(std::move(SamplePtr))
+  Process2 --> ProxyEvent: return
+end
+Process2 <-- ProxyEvent: return sampleCount
+deactivate ProxyEvent
+Process2 -[#white]> Process2
+deactivate Process2
+
+@enduml

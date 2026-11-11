@@ -1,0 +1,54 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_BINDINGS_LOLA_SUBSCRIPTION_SUBSCRIPTION_PENDING_STATES_H
+#define SCORE_MW_COM_IMPL_BINDINGS_LOLA_SUBSCRIPTION_SUBSCRIPTION_PENDING_STATES_H
+
+#include "score/mw/com/impl/bindings/lola/subscription_state_base.h"
+#include "score/mw/com/impl/scoped_event_receive_handler.h"
+
+#include <cstddef>
+#include <optional>
+
+namespace score::mw::com::impl::lola
+{
+
+class SubscriptionStateMachine;
+
+class SubscriptionPendingState final : public SubscriptionStateBase
+{
+  public:
+    // Inherit parent class constructor
+    using SubscriptionStateBase::SubscriptionStateBase;
+
+    SubscriptionPendingState(const SubscriptionPendingState&) = delete;
+    SubscriptionPendingState& operator=(const SubscriptionPendingState&) & = delete;
+    SubscriptionPendingState(SubscriptionPendingState&&) = delete;
+    SubscriptionPendingState& operator=(SubscriptionPendingState&&) & = delete;
+
+    ~SubscriptionPendingState() noexcept override = default;
+
+    Result<void> SubscribeEvent(const std::size_t max_sample_count) override;
+    void UnsubscribeEvent() override;
+    void StopOfferEvent() noexcept override;
+    void ReOfferEvent(const pid_t new_event_source_pid) override;
+
+    void SetReceiveHandler(std::weak_ptr<ScopedEventReceiveHandler> handler) noexcept override;
+    void UnsetReceiveHandler() override;
+    std::optional<std::uint16_t> GetMaxSampleCount() const override;
+    std::optional<SlotCollector>& GetSlotCollector() & noexcept override;
+    const std::optional<SlotCollector>& GetSlotCollector() const& noexcept override;
+};
+
+}  // namespace score::mw::com::impl::lola
+
+#endif  // SCORE_MW_COM_IMPL_BINDINGS_LOLA_SUBSCRIPTION_SUBSCRIPTION_PENDING_STATES_H

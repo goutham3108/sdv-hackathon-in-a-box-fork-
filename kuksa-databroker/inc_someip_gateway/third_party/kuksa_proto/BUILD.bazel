@@ -1,0 +1,47 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@@grpc+//bazel:cc_grpc_library.bzl", "cc_grpc_library")
+
+proto_library(
+    name = "kuksa_val_v2_types_proto",
+    srcs = ["kuksa/val/v2/types.proto"],
+    deps = ["@@protobuf+//:timestamp_proto"],
+)
+
+cc_proto_library(
+    name = "kuksa_val_v2_types_cc_proto",
+    deps = [":kuksa_val_v2_types_proto"],
+)
+
+proto_library(
+    name = "kuksa_val_v2_proto",
+    srcs = ["kuksa/val/v2/val.proto"],
+    deps = [":kuksa_val_v2_types_proto"],
+)
+
+cc_proto_library(
+    name = "kuksa_val_v2_cc_proto",
+    deps = [":kuksa_val_v2_proto"],
+)
+
+cc_grpc_library(
+    name = "kuksa_val_v2_cc_grpc",
+    srcs = [":kuksa_val_v2_proto"],
+    deps = [
+        ":kuksa_val_v2_cc_proto",
+        ":kuksa_val_v2_types_cc_proto",
+    ],
+    grpc_only = True,
+    visibility = ["//visibility:public"],
+)

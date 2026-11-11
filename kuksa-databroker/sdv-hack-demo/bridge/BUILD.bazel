@@ -1,0 +1,32 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_library(
+    name = "service_registration",
+    hdrs = ["service_registration.h"],
+)
+
+cc_test(
+    name = "service_registration_test",
+    srcs = ["service_registration_test.cpp"],
+    deps = [":service_registration"],
+)
+
+cc_binary(
+    name = "udp_bridge",
+    srcs = [
+        "high_beam_udp_protocol.h",
+        "main.cpp",
+    ],
+    data = ["//sdv-hack-demo:signal_routes.json"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":service_registration",
+        "//sdv-hack-demo:speed_payload",
+        "@score_lifecycle//score/launch_manager:lifecycle_cc",
+        "@score_logging//score/mw/log:log",
+        "@score_someip_gateway//third_party:vsomeip",
+        "@nlohmann_json//:json",
+    ],
+)

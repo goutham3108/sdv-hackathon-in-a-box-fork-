@@ -1,0 +1,157 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/subscription_state_machine.h"
+
+#include "score/mw/com/impl/bindings/lola/slot_collector.h"
+#include "score/mw/com/impl/bindings/lola/subscription_not_subscribed_states.h"
+#include "score/mw/com/impl/bindings/lola/subscription_subscribed_states.h"
+#include "score/mw/com/impl/bindings/lola/subscription_subscription_pending_states.h"
+
+#include <optional>
+#include <utility>
+
+namespace score::mw::com::impl::lola
+{
+
+SubscriptionStateMachine::SubscriptionStateMachine(const QualityType quality_type,
+                                                   const ElementFqId element_fq_id,
+                                                   const pid_t event_source_pid,
+                                                   ConsumerEventDataControlLocalView<>& event_data_control_local,
+                                                   EventSubscriptionControl<>& subscription_control,
+                                                   TransactionLogSet& transaction_log_set,
+                                                   const TransactionLogId& transaction_log_id) noexcept
+    : std::enable_shared_from_this<SubscriptionStateMachine>{},
+      state_mutex_{},
+      states_{std::make_unique<NotSubscribedState>(*this),
+              std::make_unique<SubscriptionPendingState>(*this),
+              std::make_unique<SubscribedState>(*this)},
+      current_state_idx_{SubscriptionStateMachineState::NOT_SUBSCRIBED_STATE},
+      subscription_data_{},
+      event_receiver_handler_{},
+      event_receive_handler_manager_{quality_type, element_fq_id, event_source_pid},
+      event_data_control_local_{event_data_control_local},
+      subscription_control_{subscription_control},
+      transaction_log_set_{transaction_log_set},
+      provider_service_instance_is_available_{true},
+      transaction_log_id_{transaction_log_id},
+      transaction_log_registration_guard_{},
+      element_fq_id_{element_fq_id}
+{
+}
+
+SubscriptionStateMachine::~SubscriptionStateMachine() noexcept = default;
+
+SubscriptionStateBase& SubscriptionStateMachine::GetCurrentEventState() noexcept
+{
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): current_state_idx_ can't be const expression
+    return *states_[static_cast<std::uint8_t>(current_state_idx_.load())];
+}
+
+const SubscriptionStateBase& SubscriptionStateMachine::GetCurrentEventState() const noexcept
+{
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-constant-array-index): current_state_idx_ can't be const expression
+    return *states_[static_cast<std::uint8_t>(current_state_idx_.load())];
+}
+
+Result<void> SubscriptionStateMachine::SubscribeEvent(const std::size_t max_sample_count) noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    return GetCurrentEventState().SubscribeEvent(max_sample_count);
+}
+
+void SubscriptionStateMachine::UnsubscribeEvent() noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    GetCurrentEventState().UnsubscribeEvent();
+}
+
+void SubscriptionStateMachine::StopOfferEvent() noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    GetCurrentEventState().StopOfferEvent();
+}
+
+void SubscriptionStateMachine::ReOfferEvent(const pid_t new_event_source_pid) noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    GetCurrentEventState().ReOfferEvent(new_event_source_pid);
+}
+
+void SubscriptionStateMachine::SetReceiveHandler(std::weak_ptr<ScopedEventReceiveHandler> handler) noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    GetCurrentEventState().SetReceiveHandler(std::move(handler));
+}
+
+void SubscriptionStateMachine::UnsetReceiveHandler()
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    GetCurrentEventState().UnsetReceiveHandler();
+}
+
+void SubscriptionStateMachine::SetSubscriptionStateChangeHandler(SubscriptionStateChangeHandler handler) noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    subscription_state_change_handler_ = std::move(handler);
+}
+
+void SubscriptionStateMachine::UnsetSubscriptionStateChangeHandler() noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    subscription_state_change_handler_.reset();
+}
+
+std::optional<std::uint16_t> SubscriptionStateMachine::GetMaxSampleCount() const noexcept
+{
+    std::lock_guard<std::mutex> lock{state_mutex_};
+    return GetCurrentEventState().GetMaxSampleCount();
+}
+
+std::optional<SlotCollector>& SubscriptionStateMachine::GetSlotCollectorLockFree() noexcept
+{
+    return GetCurrentEventState().GetSlotCollector();
+}
+
+const std::optional<SlotCollector>& SubscriptionStateMachine::GetSlotCollectorLockFree() const noexcept
+{
+    return GetCurrentEventState().GetSlotCollector();
+}
+
+const ElementFqId& SubscriptionStateMachine::GetElementFqId() const& noexcept
+{
+    return element_fq_id_;
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings. This rule states: "The std::terminate() function shall not be called
+// implicitly". std::terminate() is implicitly called from '.value()' in case it doesn't have a value but as we check
+// before with 'has_value()' so no way for throwing std::bad_optional_access which leds to std::terminate().
+// coverity[autosar_cpp14_a15_5_3_violation : FALSE]
+void SubscriptionStateMachine::TransitionToState(const SubscriptionStateMachineState newState)
+{
+    GetCurrentEventState().OnExit();
+    current_state_idx_.store(newState);
+    GetCurrentEventState().OnEntry();
+    if (subscription_state_change_handler_.has_value())
+    {
+        // We call the user-provided handler under state_mutex_ lock, which has always been acquired within this method.
+        // This is documented in the AoUs of SubscriptionStateChangeHandler!
+        const auto keep_handler =
+            subscription_state_change_handler_.value()(SubscriptionStateMachineStateToSubscriptionState(newState));
+        if (!keep_handler)
+        {
+            subscription_state_change_handler_.reset();
+        }
+    }
+}
+
+}  // namespace score::mw::com::impl::lola

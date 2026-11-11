@@ -1,0 +1,43 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_BINDINGS_LOLA_SLOT_DECREMENTER_H
+#define SCORE_MW_COM_IMPL_BINDINGS_LOLA_SLOT_DECREMENTER_H
+
+#include "score/mw/com/impl/bindings/lola/consumer_event_data_control_local_view.h"
+#include "score/mw/com/impl/bindings/lola/control_slot_types.h"
+
+namespace score::mw::com::impl::lola
+{
+
+class SlotDecrementer
+{
+  public:
+    SlotDecrementer(ConsumerEventDataControlLocalView<>& event_data_control_local,
+                    const SlotIndexType event_slot_index) noexcept;
+    ~SlotDecrementer() noexcept;
+
+    SlotDecrementer(const SlotDecrementer&) = delete;
+    SlotDecrementer& operator=(const SlotDecrementer&) = delete;
+    SlotDecrementer(SlotDecrementer&& other) noexcept;
+    SlotDecrementer& operator=(SlotDecrementer&& other) noexcept;
+
+  private:
+    void internal_delete() noexcept;
+
+    ConsumerEventDataControlLocalView<>* event_data_control_local_;
+    SlotIndexType event_slot_index_;
+};
+
+}  // namespace score::mw::com::impl::lola
+
+#endif  // SCORE_MW_COM_IMPL_BINDINGS_LOLA_SLOT_DECREMENTER_H

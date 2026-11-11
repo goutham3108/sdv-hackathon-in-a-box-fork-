@@ -1,0 +1,285 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_BINDINGS_LOLA_PROXY_H
+#define SCORE_MW_COM_IMPL_BINDINGS_LOLA_PROXY_H
+
+#include "score/mw/com/impl/bindings/lola/element_fq_id.h"
+#include "score/mw/com/impl/bindings/lola/event_control.h"
+#include "score/mw/com/impl/bindings/lola/event_data_storage.h"
+#include "score/mw/com/impl/bindings/lola/event_meta_info.h"
+#include "score/mw/com/impl/bindings/lola/methods/method_data.h"
+#include "score/mw/com/impl/bindings/lola/methods/offered_state_machine.h"
+#include "score/mw/com/impl/bindings/lola/methods/type_erased_call_queue.h"
+#include "score/mw/com/impl/bindings/lola/proxy_instance_identifier.h"
+#include "score/mw/com/impl/bindings/lola/proxy_method.h"
+#include "score/mw/com/impl/bindings/lola/service_data_storage.h"
+#include "score/mw/com/impl/configuration/lola_method_id.h"
+#include "score/mw/com/impl/configuration/lola_service_instance_id.h"
+#include "score/mw/com/impl/configuration/lola_service_type_deployment.h"
+#include "score/mw/com/impl/configuration/quality_type.h"
+#include "score/mw/com/impl/find_service_handle.h"
+#include "score/mw/com/impl/handle_type.h"
+#include "score/mw/com/impl/proxy_binding.h"
+
+#include "score/filesystem/filesystem_struct.h"
+#include "score/filesystem/i_standard_filesystem.h"
+#include "score/memory/shared/flock/flock_mutex_and_lock.h"
+#include "score/memory/shared/flock/shared_flock_mutex.h"
+#include "score/memory/shared/lock_file.h"
+#include "score/memory/shared/managed_memory_resource.h"
+#include "score/memory/shared/shared_memory_factory.h"
+#include "score/mw/com/impl/bindings/lola/methods/unique_method_identifier.h"
+#include "score/mw/log/logging.h"
+#include "score/result/result.h"
+
+#include <score/assert.hpp>
+
+#include <sched.h>
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
+
+namespace score::mw::com::impl::lola
+{
+
+class IShmPathBuilder;
+class ProxyEvent;
+
+namespace detail_proxy
+{
+
+ServiceDataStorage& GetServiceDataStorage(const memory::shared::ManagedMemoryResource& data) noexcept;
+
+}
+
+/// \brief Proxy binding implementation for all Lola proxies.
+class Proxy : public ProxyBinding
+{
+    // Suppress "AUTOSAR C++14 A11-3-1", The rule declares: "Friend declarations shall not be used".
+    // The "ProxyTestAttorney" class is a helper, which sets the internal state of "Proxy" accessing
+    // private members and used for testing purposes only.
+    // coverity[autosar_cpp14_a11_3_1_violation]
+    friend class ProxyTestAttorney;
+
+  public:
+    /// \brief Class to convert an event name to an event fq id given the information already known to a Proxy
+    ///
+    /// We create a separate class to encapsulate the data that is only required for the conversion within this class.
+    class EventNameToElementFqIdConverter
+    {
+      public:
+        EventNameToElementFqIdConverter(const LolaServiceTypeDeployment& lola_service_type_deployment,
+                                        LolaServiceInstanceId::InstanceId instance_id) noexcept
+            : service_id_{lola_service_type_deployment.service_id_},
+              events_{lola_service_type_deployment.events_},
+              instance_id_{instance_id}
+        {
+        }
+
+        ElementFqId Convert(const std::string_view event_name) const noexcept;
+
+      private:
+        const std::uint16_t service_id_;
+        const std::reference_wrapper<const LolaServiceTypeDeployment::EventIdMapping> events_;
+        LolaServiceInstanceId::InstanceId instance_id_;
+    };
+
+    Proxy(const Proxy&) noexcept = delete;
+    Proxy& operator=(const Proxy&) noexcept = delete;
+    Proxy(Proxy&&) noexcept = delete;
+    Proxy& operator=(Proxy&&) noexcept = delete;
+
+    // Suppress "AUTOSAR C++14 M3-2-2". This rule states: "The One Definition Rule shall not be violated."
+    // "AUTOSAR C++14 M3-2-4": "An identifier with external linkage shall have exactly one definition.".
+    // This is a false-positive, because this destructor has only one defition
+    // coverity[autosar_cpp14_m3_2_2_violation]
+    // coverity[autosar_cpp14_m3_2_4_violation]
+    ~Proxy() override;
+
+    static std::unique_ptr<Proxy> Create(const HandleType& handle);
+
+    Proxy(std::shared_ptr<memory::shared::ManagedMemoryResource> control,
+          std::shared_ptr<memory::shared::ManagedMemoryResource> data,
+          const QualityType quality_type,
+          EventNameToElementFqIdConverter event_name_to_element_fq_id_converter,
+          HandleType handle,
+          std::optional<memory::shared::LockFile> service_instance_usage_marker_file,
+          std::unique_ptr<score::memory::shared::FlockMutexAndLock<score::memory::shared::SharedFlockMutex>>
+              service_instance_usage_flock_mutex_and_lock,
+          score::filesystem::Filesystem filesystem,
+          ProxyInstanceIdentifier::ProxyInstanceCounter proxy_instance_counter);
+
+    /// Returns the address of the control structure, for the given event ID.
+    ///
+    /// Terminates if the event control structure cannot be found.
+    ConsumerEventDataControlLocalView<> GetConsumerEventDataControlLocalView(const ElementFqId element_fq_id);
+
+    /// Returns the EventSubscriptionControl for the given event ID.
+    ///
+    /// Terminates if the event control structure cannot be found.
+    EventSubscriptionControl<>& GetEventSubscriptionControl(const ElementFqId element_fq_id);
+
+    /// Returns the TransactionLogSet for the given event ID.
+    ///
+    /// Terminates if the event control structure cannot be found.
+    TransactionLogSet& GetTransactionLogSet(const ElementFqId element_fq_id);
+
+    /// Retrieves a reference to the event data storage area for a given ElementFqId.
+    const EventDataStorage& GetEventDataStorage(const ElementFqId element_fq_id) const;
+
+    /// Retrieves an event data meta info.
+    ///
+    /// The event meta info can be used to iterate over events in the event data storage when the type is not known e.g.
+    /// when dealing with a GenericProxyEvent. Terminates if the event meta info cannot be found.
+    ///
+    /// \param element_fq_id The Event ID.
+    /// \return An event data meta info.
+    const EventMetaInfo& GetEventMetaInfo(const ElementFqId element_fq_id) const;
+
+    /// Checks whether the event corresponding to event_name is provided
+    ///
+    /// It does this by checking whether the event corresponding to event_name exists in shared memory.
+    /// \param event_name The event name to check.
+    /// \return True if the event name exists, otherwise, false
+    bool IsEventProvided(const std::string_view event_name) const override;
+
+    /// \brief Sets up the shared memory for all the methods of the proxy, notifies the skeleton to open the shared
+    /// memory and perform any setup on skeleton side.
+    ///
+    /// After creating the shared memory, the proxy sends a blocking message which waits for a reply via message passing
+    /// to the skeleton. The skeleton will then open the shared memory and perform any setup on its side. The proxy will
+    /// then wait for an acknowledgement from the skeleton that it has completed its setup.
+    ///
+    /// \return result which contains an error if setup on the proxy or skeleton side failed or if the message passing
+    /// communication with the skeleton failed.
+    score::Result<void> SetupMethods(const std::size_t additional_shm_size_bytes) override;
+
+    QualityType GetQualityType() const noexcept;
+
+    /// \brief Returns pid of provider/skeleton side, this proxy is "connected" with.
+    /// \return
+    pid_t GetSourcePid() const noexcept;
+
+    ProxyInstanceIdentifier GetProxyInstanceIdentifier() const noexcept
+    {
+        return proxy_instance_identifier_;
+    }
+
+    void RegisterEvent(const std::string_view service_element_name, ProxyEvent& proxy_event) noexcept;
+    void RegisterMethod(const UniqueMethodIdentifier method_id, ProxyMethod& proxy_method) noexcept;
+
+    /// \brief Stops auto-reconnect for this proxy and marks it ready for destruction.
+    /// \pre Must be called exactly once on a given Proxy. Calling it a second time will terminate.
+    void PrepareDeinitialize() override;
+
+    /// \brief Clears event and method registration state and marks the proxy ready for destruction.
+    /// \note Idempotent: calling it more than once is safe.
+    void FinalizeDeinitialize() override;
+
+    memory::shared::ManagedMemoryResource& GetMethodMemoryResource() noexcept
+    {
+        SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD_MESSAGE(
+            method_shm_resource_ != nullptr,
+            "Proxy::GetControlMemoryResource: Methods managed memory resource pointer is null");
+        return *method_shm_resource_;
+    }
+
+  private:
+    static std::atomic<ProxyInstanceIdentifier::ProxyInstanceCounter> current_proxy_instance_counter_;
+
+    void StartProxyAutoReconnect();
+    void StopProxyAutoReconnect();
+
+    void ServiceAvailabilityChangeHandler(const bool is_service_available);
+    void CleanupMethods();
+    void InitializeSharedMemoryForMethods(
+        memory::shared::ManagedMemoryResource& memory_resource,
+        const std::vector<std::pair<UniqueMethodIdentifier, LolaMethodInstanceDeployment::QueueSize>>& method_data,
+        const std::vector<TypeErasedCallQueue::TypeErasedElementInfo>& type_erased_element_infos);
+
+    static std::size_t CalculateRequiredShmSize(
+        std::vector<TypeErasedCallQueue::TypeErasedElementInfo> type_erased_element_infos);
+
+    memory::shared::SharedMemoryFactory::UserPermissions GetSkeletonShmPermissions() const;
+    std::vector<std::pair<UniqueMethodIdentifier, LolaMethodInstanceDeployment::QueueSize>>
+    GetMethodIdAndQueueSizeForEnabledMethods() const;
+    std::vector<TypeErasedCallQueue::TypeErasedElementInfo> GetTypeErasedElementInfoForEnabledMethods(
+        const std::vector<std::pair<UniqueMethodIdentifier, LolaMethodInstanceDeployment::QueueSize>>&
+            enabled_method_data) const;
+    std::string GetMethodChannelShmName() const;
+
+    std::shared_ptr<memory::shared::ManagedMemoryResource> control_;
+    std::shared_ptr<memory::shared::ManagedMemoryResource> data_;
+    std::shared_ptr<memory::shared::ManagedMemoryResource> method_shm_resource_;
+
+    QualityType quality_type_;
+    EventNameToElementFqIdConverter event_name_to_element_fq_id_converter_;
+    HandleType handle_;
+    std::unordered_map<std::string_view, std::reference_wrapper<ProxyEvent>> proxy_events_;
+
+    /// Mutex which synchronises registration of Proxy service elements via Proxy::RegisterEvent with the
+    /// FindServiceHandler in find_service_guard_ which will call NotifyServiceInstanceChangedAvailability on all
+    /// currently registered Proxy service elements.
+    std::mutex proxy_event_registration_mutex_;
+    bool is_service_instance_available_;
+    std::optional<memory::shared::LockFile> service_instance_usage_marker_file_;
+    std::unique_ptr<score::memory::shared::FlockMutexAndLock<score::memory::shared::SharedFlockMutex>>
+        service_instance_usage_flock_mutex_and_lock_;
+    /// Mutex which synchronises registration of Proxy methods via Proxy::RegisterMethod with the
+    /// FindServiceHandler in find_service_guard_ which will call ServiceAvailabilityChangeHandler iterating over
+    /// proxy_methods_.
+    std::mutex proxy_method_registration_mutex_;
+    std::unordered_map<score::mw::com::impl::lola::UniqueMethodIdentifier, std::reference_wrapper<ProxyMethod>>
+        proxy_methods_;
+    MethodData* method_data_;
+    ProxyInstanceIdentifier proxy_instance_identifier_;
+    OfferedStateMachine offered_state_machine_;
+
+    /// Flag which is set once the proxy methods are fully setup in Proxy::SetupMethods(). This is checked in the
+    /// ServiceAvailabilityChangeHandler so that it doesn't send a notification to the Skeleton before the shared memory
+    /// has been setup. See score/docs/features/ipc/lola/method/README.md for details about the full methods
+    /// logic related to proxy autoreconnect.
+    ///
+    /// We use an atomic instead of a mutex because we don't care if SubscribeServiceMethod is called multiple times
+    /// concurrently on IMessagePassingService, as long as the shared memory has been setup. The Skeleton side will
+    /// simply ignore any duplicate messages.
+    std::atomic<bool> are_proxy_methods_setup_;
+
+    /// Tracks whether the proxy methods are currently subscribed (i.e. the Skeleton has acknowledged the subscription).
+    /// Stored directly in Proxy so that CleanupMethods() can safely check this flag even after the ProxyMethod
+    /// objects (and their own is_subscribed_ members) have been destroyed.
+    std::atomic<bool> are_proxy_methods_subscribed_;
+
+    score::filesystem::Filesystem filesystem_;
+
+    /// Handle returned by ServiceDiscovery::StartFindService which is called for proxy auto reconnect, Held so we can
+    /// call StopFindService later from StopProxyAutoReconnect().
+    std::optional<FindServiceHandle> find_service_handle_;
+
+    /// Set by PrepareDeinitialize / FinalizeDeinitialize respectively. ~Proxy terminates unless both were called.
+    bool prepare_deinitialize_called_;
+    bool finalize_deinitialize_called_;
+};
+
+}  // namespace score::mw::com::impl::lola
+
+#endif  // SCORE_MW_COM_IMPL_BINDINGS_LOLA_PROXY_H

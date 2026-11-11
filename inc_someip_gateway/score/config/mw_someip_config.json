@@ -1,0 +1,974 @@
+{
+    "service_types": [
+        {
+            "service_type_name": "body_control_module_tx",
+            "service_id": 17152,
+            "service_version_major": 1,
+            "service_version_minor": 0,
+            "events": [
+                {
+                    "event_name": "high_beam_state",
+                    "event_id": 33840,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33840
+                    ]
+                },
+                {
+                    "event_name": "horn_state",
+                    "event_id": 33844,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33844
+                    ]
+                },
+                {
+                    "event_name": "high_beam_switch_state",
+                    "event_id": 33846,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33846
+                    ]
+                },
+                {
+                    "event_name": "parking_lights_state",
+                    "event_id": 33848,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33848
+                    ]
+                },
+                {
+                    "event_name": "running_lights_state",
+                    "event_id": 33850,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33850
+                    ]
+                },
+                {
+                    "event_name": "front_fog_lights_state",
+                    "event_id": 33852,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33852
+                    ]
+                },
+                {
+                    "event_name": "rear_fog_lights_state",
+                    "event_id": 33854,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33854
+                    ]
+                },
+                {
+                    "event_name": "hazard_lights_state",
+                    "event_id": 33856,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33856
+                    ]
+                },
+                {
+                    "event_name": "left_indicator_state",
+                    "event_id": 33858,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33858
+                    ]
+                },
+                {
+                    "event_name": "right_indicator_state",
+                    "event_id": 33860,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33860
+                    ]
+                },
+                {
+                    "event_name": "brake_lights_state",
+                    "event_id": 33862,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33862
+                    ]
+                },
+                {
+                    "event_name": "hood_open_state",
+                    "event_id": 33864,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33864
+                    ]
+                },
+                {
+                    "event_name": "rear_trunk_open_state",
+                    "event_id": 33866,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33866
+                    ]
+                },
+                {
+                    "event_name": "rear_trunk_locked_state",
+                    "event_id": 33868,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33868
+                    ]
+                },
+                {
+                    "event_name": "rear_trunk_position_state",
+                    "event_id": 33870,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33870
+                    ]
+                },
+                {
+                    "event_name": "driver_mirror_folded_state",
+                    "event_id": 33872,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33872
+                    ]
+                },
+                {
+                    "event_name": "passenger_mirror_folded_state",
+                    "event_id": 33874,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33874
+                    ]
+                },
+                {
+                    "event_name": "driver_mirror_heating_state",
+                    "event_id": 33876,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33876
+                    ]
+                },
+                {
+                    "event_name": "passenger_mirror_heating_state",
+                    "event_id": 33878,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33878
+                    ]
+                },
+                {
+                    "event_name": "front_wiping_mode_state",
+                    "event_id": 33880,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 32
+                    },
+                    "eventgroup_ids": [
+                        33880
+                    ]
+                },
+                {
+                    "event_name": "front_wiping_intensity_state",
+                    "event_id": 33882,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33882
+                    ]
+                },
+                {
+                    "event_name": "front_washer_fluid_level_state",
+                    "event_id": 33884,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33884
+                    ]
+                },
+                {
+                    "event_name": "front_washer_fluid_low_state",
+                    "event_id": 33886,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33886
+                    ]
+                },
+                {
+                    "event_name": "rain_intensity_state",
+                    "event_id": 33888,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33888
+                    ]
+                },
+                {
+                    "event_name": "front_windshield_heating_state",
+                    "event_id": 33890,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33890
+                    ]
+                },
+                {
+                    "event_name": "rear_windshield_heating_state",
+                    "event_id": 33892,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33892
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_door_locked_state",
+                    "event_id": 33894,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33894
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_door_open_state",
+                    "event_id": 33896,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33896
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_window_position_state",
+                    "event_id": 33898,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33898
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_child_lock_state",
+                    "event_id": 33900,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33900
+                    ]
+                },
+                {
+                    "event_name": "row1_passenger_door_locked_state",
+                    "event_id": 33902,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33902
+                    ]
+                },
+                {
+                    "event_name": "row1_passenger_door_open_state",
+                    "event_id": 33904,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33904
+                    ]
+                },
+                {
+                    "event_name": "row1_passenger_window_position_state",
+                    "event_id": 33906,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33906
+                    ]
+                },
+                {
+                    "event_name": "row2_driver_door_locked_state",
+                    "event_id": 33908,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33908
+                    ]
+                },
+                {
+                    "event_name": "row2_driver_door_open_state",
+                    "event_id": 33910,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33910
+                    ]
+                },
+                {
+                    "event_name": "row2_passenger_door_locked_state",
+                    "event_id": 33912,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33912
+                    ]
+                },
+                {
+                    "event_name": "row2_passenger_door_open_state",
+                    "event_id": 33914,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33914
+                    ]
+                },
+                {
+                    "event_name": "engine_running_state",
+                    "event_id": 33916,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33916
+                    ]
+                },
+                {
+                    "event_name": "oil_temperature_state",
+                    "event_id": 33918,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 2
+                    },
+                    "eventgroup_ids": [
+                        33918
+                    ]
+                },
+                {
+                    "event_name": "cell_voltages_state",
+                    "event_id": 33920,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 32
+                    },
+                    "eventgroup_ids": [
+                        33920
+                    ]
+                },
+                {
+                    "event_name": "vertical_acceleration_state",
+                    "event_id": 33922,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 4
+                    },
+                    "eventgroup_ids": [
+                        33922
+                    ]
+                },
+                {
+                    "event_name": "brake_pedal_position_state",
+                    "event_id": 33924,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33924
+                    ]
+                },
+                {
+                    "event_name": "engine_stop_start_enabled_state",
+                    "event_id": 33926,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33926
+                    ]
+                },
+                {
+                    "event_name": "transmission_performance_mode_state",
+                    "event_id": 33928,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 32
+                    },
+                    "eventgroup_ids": [
+                        33928
+                    ]
+                }
+            ],
+            "local_service_instances": [
+                {
+                    "instance_specifier": "/body_control_module/local_tx",
+                    "instance_id": 4096
+                }
+            ]
+        },
+        {
+            "service_type_name": "body_control_module_rx",
+            "service_id": 17152,
+            "service_version_major": 1,
+            "service_version_minor": 0,
+            "events": [
+                {
+                    "event_name": "high_beam_state",
+                    "event_id": 33841,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33841
+                    ]
+                },
+                {
+                    "event_name": "horn_state",
+                    "event_id": 33845,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33845
+                    ]
+                },
+                {
+                    "event_name": "high_beam_switch_state",
+                    "event_id": 33847,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33847
+                    ]
+                },
+                {
+                    "event_name": "parking_lights_state",
+                    "event_id": 33849,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33849
+                    ]
+                },
+                {
+                    "event_name": "running_lights_state",
+                    "event_id": 33851,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33851
+                    ]
+                },
+                {
+                    "event_name": "front_fog_lights_state",
+                    "event_id": 33853,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33853
+                    ]
+                },
+                {
+                    "event_name": "rear_fog_lights_state",
+                    "event_id": 33855,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33855
+                    ]
+                },
+                {
+                    "event_name": "hazard_lights_state",
+                    "event_id": 33857,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33857
+                    ]
+                },
+                {
+                    "event_name": "left_indicator_state",
+                    "event_id": 33859,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33859
+                    ]
+                },
+                {
+                    "event_name": "right_indicator_state",
+                    "event_id": 33861,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33861
+                    ]
+                },
+                {
+                    "event_name": "brake_lights_state",
+                    "event_id": 33863,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33863
+                    ]
+                },
+                {
+                    "event_name": "hood_open_state",
+                    "event_id": 33865,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33865
+                    ]
+                },
+                {
+                    "event_name": "rear_trunk_open_state",
+                    "event_id": 33867,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33867
+                    ]
+                },
+                {
+                    "event_name": "rear_trunk_locked_state",
+                    "event_id": 33869,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33869
+                    ]
+                },
+                {
+                    "event_name": "rear_trunk_position_state",
+                    "event_id": 33871,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33871
+                    ]
+                },
+                {
+                    "event_name": "driver_mirror_folded_state",
+                    "event_id": 33873,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33873
+                    ]
+                },
+                {
+                    "event_name": "passenger_mirror_folded_state",
+                    "event_id": 33875,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33875
+                    ]
+                },
+                {
+                    "event_name": "driver_mirror_heating_state",
+                    "event_id": 33877,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33877
+                    ]
+                },
+                {
+                    "event_name": "passenger_mirror_heating_state",
+                    "event_id": 33879,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33879
+                    ]
+                },
+                {
+                    "event_name": "front_wiping_mode_state",
+                    "event_id": 33881,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 32
+                    },
+                    "eventgroup_ids": [
+                        33881
+                    ]
+                },
+                {
+                    "event_name": "front_wiping_intensity_state",
+                    "event_id": 33883,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33883
+                    ]
+                },
+                {
+                    "event_name": "front_washer_fluid_level_state",
+                    "event_id": 33885,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33885
+                    ]
+                },
+                {
+                    "event_name": "front_washer_fluid_low_state",
+                    "event_id": 33887,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33887
+                    ]
+                },
+                {
+                    "event_name": "rain_intensity_state",
+                    "event_id": 33889,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33889
+                    ]
+                },
+                {
+                    "event_name": "front_windshield_heating_state",
+                    "event_id": 33891,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33891
+                    ]
+                },
+                {
+                    "event_name": "rear_windshield_heating_state",
+                    "event_id": 33893,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33893
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_door_locked_state",
+                    "event_id": 33895,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33895
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_door_open_state",
+                    "event_id": 33897,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33897
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_window_position_state",
+                    "event_id": 33899,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33899
+                    ]
+                },
+                {
+                    "event_name": "row1_driver_child_lock_state",
+                    "event_id": 33901,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33901
+                    ]
+                },
+                {
+                    "event_name": "row1_passenger_door_locked_state",
+                    "event_id": 33903,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33903
+                    ]
+                },
+                {
+                    "event_name": "row1_passenger_door_open_state",
+                    "event_id": 33905,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33905
+                    ]
+                },
+                {
+                    "event_name": "row1_passenger_window_position_state",
+                    "event_id": 33907,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33907
+                    ]
+                },
+                {
+                    "event_name": "row2_driver_door_locked_state",
+                    "event_id": 33909,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33909
+                    ]
+                },
+                {
+                    "event_name": "row2_driver_door_open_state",
+                    "event_id": 33911,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33911
+                    ]
+                },
+                {
+                    "event_name": "row2_passenger_door_locked_state",
+                    "event_id": 33913,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33913
+                    ]
+                },
+                {
+                    "event_name": "row2_passenger_door_open_state",
+                    "event_id": 33915,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33915
+                    ]
+                },
+                {
+                    "event_name": "engine_running_state",
+                    "event_id": 33917,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33917
+                    ]
+                },
+                {
+                    "event_name": "oil_temperature_state",
+                    "event_id": 33919,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 2
+                    },
+                    "eventgroup_ids": [
+                        33919
+                    ]
+                },
+                {
+                    "event_name": "cell_voltages_state",
+                    "event_id": 33921,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 32
+                    },
+                    "eventgroup_ids": [
+                        33921
+                    ]
+                },
+                {
+                    "event_name": "vertical_acceleration_state",
+                    "event_id": 33923,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 4
+                    },
+                    "eventgroup_ids": [
+                        33923
+                    ]
+                },
+                {
+                    "event_name": "brake_pedal_position_state",
+                    "event_id": 33925,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 1
+                    },
+                    "eventgroup_ids": [
+                        33925
+                    ]
+                },
+                {
+                    "event_name": "engine_stop_start_enabled_state",
+                    "event_id": 33927,
+                    "serialization_config_type": "BooleanSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        33927
+                    ]
+                },
+                {
+                    "event_name": "transmission_performance_mode_state",
+                    "event_id": 33929,
+                    "serialization_config_type": "NullSerializerConfig",
+                    "serialization_config": {
+                        "max_message_size": 32
+                    },
+                    "eventgroup_ids": [
+                        33929
+                    ]
+                }
+            ],
+            "remote_service_instances": [
+                {
+                    "instance_specifier": "/body_control_module/network_rx",
+                    "instance_id": 4097
+                }
+            ]
+        },
+        {
+            "service_type_name": "vehicle::VehicleDynamicsService",
+            "service_id": 6433,
+            "service_version_major": 1,
+            "service_version_minor": 0,
+            "events": [
+                {
+                    "event_name": "speed",
+                    "event_id": 1,
+                    "serialization_config_type": "VehicleDynamicsSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        1
+                    ]
+                },
+                {
+                    "event_name": "speedAck",
+                    "event_id": 2,
+                    "serialization_config_type": "VehicleDynamicsSerializerConfig",
+                    "serialization_config": {},
+                    "eventgroup_ids": [
+                        2
+                    ]
+                }
+            ],
+            "local_service_instances": [
+                {
+                    "instance_specifier": "/Vehicle/Service1/Instance",
+                    "instance_id": 1
+                }
+            ],
+            "remote_service_instances": [
+                {
+                    "instance_specifier": "/Vehicle/Service2/Instance",
+                    "instance_id": 2
+                }
+            ]
+        }
+    ]
+}

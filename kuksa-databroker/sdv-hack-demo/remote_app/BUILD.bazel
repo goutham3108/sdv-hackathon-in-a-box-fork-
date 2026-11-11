@@ -1,0 +1,25 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_test(
+    name = "high_beam_command_test",
+    srcs = ["high_beam_command_test.cpp", "high_beam_udp_protocol.h"],
+)
+
+cc_binary(
+    name = "remote_app",
+    srcs = [
+        "high_beam_udp_protocol.h",
+        "main.cpp",
+    ],
+    data = ["//sdv-hack-demo:signal_routes.json"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//sdv-hack-demo:speed_payload",
+        "@score_lifecycle//score/launch_manager:lifecycle_cc",
+        "@score_logging//score/mw/log:log",
+        "@score_persistency//:kvs_cpp",
+        "@score_someip_gateway//third_party:vsomeip",
+        "@nlohmann_json//:json",
+    ],
+)

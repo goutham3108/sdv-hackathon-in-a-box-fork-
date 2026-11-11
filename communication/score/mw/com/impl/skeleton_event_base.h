@@ -1,0 +1,138 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_SKELETON_EVENT_BASE_H
+#define SCORE_MW_COM_IMPL_SKELETON_EVENT_BASE_H
+
+#include "score/mw/com/impl/enable_reference_to_moveable_from_this.h"
+#include "score/mw/com/impl/flag_owner.h"
+#include "score/mw/com/impl/sample_allocatee_tracker.h"
+#include "score/mw/com/impl/skeleton_event_binding.h"
+#include "score/mw/com/impl/tracing/skeleton_event_tracing_data.h"
+
+#include "score/result/result.h"
+
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <utility>
+
+namespace score::mw::com::impl
+{
+
+class SkeletonEventBaseView;
+
+class SkeletonEventBase : public EnableReferenceToMoveableFromThis<SkeletonEventBase>
+{
+    // Suppress "AUTOSAR C++14 A11-3-1", The rule states: "Friend declarations shall not be used".
+    // Design decision. This class provides a view to the private members of this class.
+    // coverity[autosar_cpp14_a11_3_1_violation]
+    friend SkeletonEventBaseView;
+
+  public:
+    SkeletonEventBase(const std::string_view event_name,
+                      std::optional<InitializeSampleCallback> initialize_sample_callback,
+                      std::unique_ptr<SkeletonEventBinding> binding)
+        : EnableReferenceToMoveableFromThis<SkeletonEventBase>(),
+          binding_{std::move(binding)},
+          event_name_{event_name},
+          initialize_sample_callback_{std::move(initialize_sample_callback)},
+          tracing_data_{},
+          service_offered_flag_{},
+          sample_allocatee_tracker_{std::make_unique<SampleAllocateeTracker>()}
+    {
+    }
+
+    ~SkeletonEventBase() override = default;
+
+    /// \brief A SkeletonEventBase shall not be copyable
+    SkeletonEventBase(const SkeletonEventBase&) = delete;
+    SkeletonEventBase& operator=(const SkeletonEventBase&) & = delete;
+
+    /// \brief Used to indicate that the event shall be available to consumer
+    /// Performs binding independent functionality and then dispatches to the binding
+    score::Result<void> PrepareOffer() noexcept
+    {
+        const auto result = binding_->PrepareOffer(initialize_sample_callback_);
+        if (result.has_value())
+        {
+            service_offered_flag_.Set();
+        }
+        return result;
+    }
+
+    /// \brief Used to indicate that the event shall no longer be available to consumer
+    /// Performs binding independent functionality and then dispatches to the binding
+    void PrepareStopOffer() noexcept
+    {
+        if (service_offered_flag_.IsSet())
+        {
+            binding_->PrepareStopOffer();
+            service_offered_flag_.Clear();
+        }
+    }
+
+  protected:
+    SkeletonEventBase(SkeletonEventBase&&) noexcept = default;
+    SkeletonEventBase& operator=(SkeletonEventBase&&) & noexcept = default;
+
+    // Suppress "AUTOSAR C++14 M11-0-1" rule findings. This rule states: "Member data in non-POD class types shall
+    // be private.". We need these data elements to exchange this information between the SkeletonEventBase and the
+    // SkeletonEvent.
+    // coverity[autosar_cpp14_m11_0_1_violation]
+    std::unique_ptr<SkeletonEventBinding> binding_;
+    // coverity[autosar_cpp14_m11_0_1_violation]
+    std::string_view event_name_;
+    // coverity[autosar_cpp14_m11_0_1_violation]
+    std::optional<InitializeSampleCallback> initialize_sample_callback_;
+    // coverity[autosar_cpp14_m11_0_1_violation]
+    tracing::SkeletonEventTracingData tracing_data_;
+    // coverity[autosar_cpp14_m11_0_1_violation]
+    FlagOwner service_offered_flag_;
+    /// \brief Tracker for outstanding SampleAllocateePtr instances.
+    /// \details This tracker ensures that all SampleAllocateePtr instances created via Allocate() are destroyed
+    /// before the SkeletonEvent is destroyed. If any SampleAllocateePtr outlives the SkeletonEvent, the destructor
+    /// will terminate the application (symmetric with ProxyEventBase behavior for SamplePtr).
+    /// A unique_ptr is used since SampleAllocateeTracker is not moveable.
+    // coverity[autosar_cpp14_m11_0_1_violation]
+    std::unique_ptr<SampleAllocateeTracker> sample_allocatee_tracker_;
+};
+
+class SkeletonEventBaseView
+{
+  public:
+    explicit SkeletonEventBaseView(SkeletonEventBase& skeleton_event_base) : skeleton_event_base_{skeleton_event_base}
+    {
+    }
+
+    SkeletonEventBinding* GetBinding()
+    {
+        return skeleton_event_base_.binding_.get();
+    }
+
+    const tracing::SkeletonEventTracingData& GetSkeletonEventTracing() &
+    {
+        return skeleton_event_base_.tracing_data_;
+    }
+
+    void SetSkeletonEventTracing(const tracing::SkeletonEventTracingData& skeleton_event_tracing_data)
+    {
+        skeleton_event_base_.tracing_data_ = skeleton_event_tracing_data;
+    }
+
+  private:
+    SkeletonEventBase& skeleton_event_base_;
+};
+
+}  // namespace score::mw::com::impl
+
+#endif  // SCORE_MW_COM_IMPL_SKELETON_EVENT_BASE_H

@@ -1,0 +1,22 @@
+Identifier,Assumption of Use (AoU) URL
+__builtin_*,broken_link_c/issue/3871095
+_*,"broken_link_c/issue/3871347, broken_link_c/issue/3871354"
+dup2,broken_link_c/issue/3871134
+fork,broken_link_c/issue/3871128
+getuid,broken_link_c/issue/3871133
+InterruptHookIdle2,broken_link_c/issue/3871137
+SCHED_CONFIGURE,broken_link_c/issue/3871138
+secpol_crc32,broken_link_c/issue/3871147
+secpol_find_blob,broken_link_c/issue/3871147
+secpol_find_custom_blob,broken_link_c/issue/3871147
+secpol_find_entry,broken_link_c/issue/3871147
+secpol_reset,broken_link_c/issue/3871147
+SIGEV_THREAD,broken_link_c/issue/3871061
+slog2_dump_logs_to_file,broken_link_c/issue/3871075
+slog2_hash,broken_link_c/issue/3871075
+slog2_obfuscate,broken_link_c/issue/3871075
+std::messages::*close,broken_link_c/issue/4127013
+std::messages::*get,broken_link_c/issue/4127013
+std::messages::*open,broken_link_c/issue/4127013
+SyncMutexEvent,broken_link_c/issue/3871135
+wchar_t,broken_link_c/issue/3871048

@@ -1,0 +1,37 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/message_passing/qnx_dispatch/qnx_resource_path.h"
+
+#include <score/assert.hpp>
+#include <score/utility.hpp>
+
+#include <iterator>
+
+namespace score::message_passing::detail
+{
+
+QnxResourcePath::QnxResourcePath(const std::string_view identifier) noexcept
+    : buffer_{GetQnxPrefix().cbegin(), GetQnxPrefix().cend()}
+{
+    SCORE_LANGUAGE_FUTURECPP_PRECONDITION((!identifier.empty()) && (identifier.size() <= kMaxIdentifierLen));
+
+    const auto* identifier_begin = identifier.cbegin();
+    if (*identifier_begin == '/')
+    {
+        identifier_begin = std::next(identifier_begin);
+    }
+    score::cpp::ignore = buffer_.insert(buffer_.cend(), identifier_begin, identifier.cend());
+    buffer_.push_back('\0');  // AUTOSAR C++14 M5-0-11: Use character literal instead of plain integer
+}
+
+}  // namespace score::message_passing::detail

@@ -1,0 +1,398 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_BINDINGS_LOLA_MESSAGE_PASSING_SERVICE_INSTANCE_H
+#define SCORE_MW_COM_IMPL_BINDINGS_LOLA_MESSAGE_PASSING_SERVICE_INSTANCE_H
+
+#include "score/mw/com/impl/bindings/lola/messaging/asil_specific_cfg.h"
+#include "score/mw/com/impl/bindings/lola/messaging/i_message_passing_service.h"
+#include "score/mw/com/impl/bindings/lola/messaging/i_message_passing_service_instance.h"
+#include "score/mw/com/impl/bindings/lola/messaging/message_passing_client_cache.h"
+#include "score/mw/com/impl/bindings/lola/proxy_instance_identifier.h"
+#include "score/mw/com/impl/bindings/lola/skeleton_instance_identifier.h"
+
+#include "score/language/safecpp/scoped_function/scope.h"
+#include "score/message_passing/i_client_factory.h"
+#include "score/message_passing/i_server.h"
+#include "score/message_passing/i_server_factory.h"
+
+// TODO: PMR
+#include "score/concurrency/thread_pool.h"
+
+#include <score/span.hpp>
+
+// TODO: PMR
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <set>
+#include <shared_mutex>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+namespace score::mw::com::impl::lola
+{
+
+class MessagePassingServiceInstanceAttorney;
+
+class MessagePassingServiceInstance : public IMessagePassingServiceInstance
+{
+  public:
+    // required exclusively for testing purposes
+    // coverity[autosar_cpp14_a11_3_1_violation]
+    friend class MessagePassingServiceInstanceAttorney;
+
+    MessagePassingServiceInstance(const ClientQualityType asil_level,
+                                  const AsilSpecificCfg& config,
+                                  score::message_passing::IServerFactory& server_factory,
+                                  score::message_passing::IClientFactory& client_factory,
+                                  score::concurrency::Executor& local_event_executor) noexcept;
+
+    MessagePassingServiceInstance(const MessagePassingServiceInstance&) = delete;
+    MessagePassingServiceInstance(MessagePassingServiceInstance&&) = delete;
+    MessagePassingServiceInstance& operator=(const MessagePassingServiceInstance&) = delete;
+    MessagePassingServiceInstance& operator=(MessagePassingServiceInstance&&) = delete;
+
+    ~MessagePassingServiceInstance() noexcept override = default;
+
+    void NotifyEvent(const ElementFqId event_id) noexcept override;
+
+    IMessagePassingService::HandlerRegistrationNoType RegisterEventNotification(
+        const ElementFqId event_id,
+        std::weak_ptr<ScopedEventReceiveHandler> callback,
+        const pid_t target_node_id) noexcept override;
+
+    void ReregisterEventNotification(const ElementFqId event_id, const pid_t target_node_id) noexcept override;
+
+    void UnregisterEventNotification(const ElementFqId event_id,
+                                     const IMessagePassingService::HandlerRegistrationNoType registration_no,
+                                     const pid_t target_node_id) noexcept override;
+
+    Result<void> RegisterOnServiceMethodSubscribedHandler(
+        const SkeletonInstanceIdentifier skeleton_instance_identifier,
+        IMessagePassingService::ServiceMethodSubscribedHandler subscribed_callback,
+        IMessagePassingService::AllowedConsumerUids allowed_proxy_uids) override;
+
+    Result<void> RegisterOnServiceMethodUnsubscribedHandler(
+        const SkeletonInstanceIdentifier skeleton_instance_identifier,
+        IMessagePassingService::ServiceMethodUnsubscribedHandler unsubscribed_callback) override;
+
+    Result<void> RegisterMethodCallHandler(const ProxyMethodInstanceIdentifier proxy_method_instance_identifier,
+                                           IMessagePassingService::MethodCallHandler method_call_callback,
+                                           const uid_t allowed_proxy_uid) override;
+
+    void UnregisterOnServiceMethodSubscribedHandler(
+        const SkeletonInstanceIdentifier skeleton_instance_identifier) override;
+
+    void UnregisterOnServiceMethodUnsubscribedHandler(
+        const SkeletonInstanceIdentifier skeleton_instance_identifier) override;
+
+    void UnregisterMethodCallHandler(const ProxyMethodInstanceIdentifier proxy_method_instance_identifier) override;
+
+    void NotifyOutdatedNodeId(const pid_t outdated_node_id, const pid_t target_node_id) noexcept override;
+
+    /// \brief Registers a callback for event notification existence changes.
+    /// \details This callback is invoked when the existence of event notification registrations changes:
+    ///          with 'true' when the first event notification is registered and with 'false' when the last event
+    ///          notification is unregistered. This allows SkeletonEvent to optimise performance by skipping
+    ///          NotifyEvent() calls when no event notifications are registered. The callback is invoked synchronously
+    ///          during event notification registration/unregistration. If event notifications are already registered
+    ///          when this method is called, the callback is invoked immediately with 'true'.
+    /// \param event_id The event to monitor for event notification existence changes.
+    /// \param callback The callback to invoke when event notification existence changes.
+    void RegisterEventNotificationExistenceChangedCallback(
+        const ElementFqId event_id,
+        IMessagePassingService::HandlerStatusChangeCallback callback) noexcept override;
+
+    /// \brief Unregisters the callback for event notification existence changes.
+    /// \details After unregistration, no further callbacks will be invoked for event notification
+    ///          existence changes of this event.
+    /// \param event_id The event to stop monitoring.
+    void UnregisterEventNotificationExistenceChangedCallback(const ElementFqId event_id) noexcept override;
+
+    Result<void> SubscribeServiceMethod(const SkeletonInstanceIdentifier& skeleton_instance_identifier,
+                                        const ProxyInstanceIdentifier& proxy_instance_identifier,
+                                        const pid_t target_node_id) override;
+
+    Result<void> UnsubscribeServiceMethod(const SkeletonInstanceIdentifier& skeleton_instance_identifier,
+                                          const ProxyInstanceIdentifier& proxy_instance_identifier,
+                                          const pid_t target_node_id) override;
+
+    Result<void> CallMethod(const ProxyMethodInstanceIdentifier& proxy_method_instance_identifier,
+                            const std::size_t queue_position,
+                            const pid_t target_node_id) override;
+
+  private:
+    enum class MessageType : std::uint8_t
+    {
+        kRegisterEventNotifier = 1,  //< event notifier registration message sent by proxy_events
+        kUnregisterEventNotifier,    //< event notifier un-registration message sent by proxy_events
+        kNotifyEvent,                //< event update notification message sent by skeleton_events
+        kOutdatedNodeId,  //< outdated node id message (sent from a LoLa process in the role as consumer to the
+                          // producer)
+    };
+
+    enum class MessageWithReplyType : std::uint8_t
+    {
+        kSubscribeServiceMethod = 1U,
+        kCallMethod,
+        kUnsubscribeServiceMethod,
+    };
+
+    struct RegisteredNotificationHandler
+    {
+        // Suppress "AUTOSAR C++14 M11-0-1" rule findings. This rule states: "Member data in non-POD class types
+        // shall be private.". We need these data elements to be organized into a coherent organized data structure.
+        // coverity[autosar_cpp14_m11_0_1_violation]
+        std::weak_ptr<ScopedEventReceiveHandler> handler;
+        // coverity[autosar_cpp14_m11_0_1_violation]
+        IMessagePassingService::HandlerRegistrationNoType register_no{};
+    };
+
+    /// \brief Counter for registered event receive notifications for the given (target) node.
+    struct NodeCounter
+    {
+        // While true that pid_t is not a fixed width integer it is required by the POSIX standard here.
+        // coverity[autosar_cpp14_a9_6_1_violation]
+        pid_t node_id;
+        std::uint16_t counter;
+    };
+
+    // false-positive: is used to define the size of buffer for handlers
+    // coverity[autosar_cpp14_a0_1_1_violation]
+    static constexpr std::uint32_t kMaxReceiveHandlersPerEvent{5U};
+
+    // false-positive: is used to define the size of tmp array for node IDs
+    // coverity[autosar_cpp14_a0_1_1_violation]
+    static constexpr std::uint8_t NodeIdTmpBufferSize{20U};
+
+    // TODO: PMR
+    using EventUpdateNotifierMapType = std::unordered_map<ElementFqId, std::vector<RegisteredNotificationHandler>>;
+    using EventUpdateNodeIdMapType = std::unordered_map<ElementFqId, std::set<pid_t>>;
+    using EventUpdateRegistrationCountMapType = std::unordered_map<ElementFqId, NodeCounter>;
+
+    using SubscribeServiceMethodMapType = std::unordered_map<
+        SkeletonInstanceIdentifier,
+        std::pair<IMessagePassingService::ServiceMethodSubscribedHandler, IMessagePassingService::AllowedConsumerUids>>;
+    using CallMethodMapType =
+        std::unordered_map<ProxyMethodInstanceIdentifier, std::pair<IMessagePassingService::MethodCallHandler, uid_t>>;
+
+    /// \brief tmp buffer for copying ids under lock.
+    /// \todo Make its size configurable?
+    using NodeIdTmpBufferType = std::array<pid_t, NodeIdTmpBufferSize>;
+
+    message_passing::MessageCallback CreateSendMessageWithReplyCallback();
+
+    void MessageCallback(const pid_t sender_pid, const score::cpp::span<const std::uint8_t> message) noexcept;
+    score::Result<void> MessageCallbackWithReply(const uid_t sender_uid,
+                                                 const pid_t sender_pid,
+                                                 const score::cpp::span<const std::uint8_t> message);
+    void HandleNotifyEventMsg(const score::cpp::span<const std::uint8_t> payload, const pid_t sender_node_id) noexcept;
+    void HandleRegisterNotificationMsg(const score::cpp::span<const std::uint8_t> payload,
+                                       const pid_t sender_node_id) noexcept;
+    void HandleUnregisterNotificationMsg(const score::cpp::span<const std::uint8_t> payload,
+                                         const pid_t sender_node_id) noexcept;
+    void HandleOutdatedNodeIdMsg(const score::cpp::span<const std::uint8_t> payload,
+                                 const pid_t sender_node_id) noexcept;
+    score::Result<void> HandleSubscribeServiceMethodMsg(const score::cpp::span<const std::uint8_t> payload,
+                                                        const uid_t sender_uid,
+                                                        const pid_t sender_node_id);
+    score::Result<void> HandleUnsubscribeServiceMethodMsg(const score::cpp::span<const std::uint8_t> payload,
+                                                          const pid_t sender_node_id);
+    score::Result<void> HandleCallMethodMsg(const score::cpp::span<const std::uint8_t> payload, const uid_t sender_uid);
+
+    std::uint32_t NotifyEventLocally(const ElementFqId event_id) noexcept;
+    void NotifyEventRemote(const ElementFqId event_id) noexcept;
+    void RegisterEventNotificationRemote(const ElementFqId event_id, const pid_t target_node_id) noexcept;
+    void UnregisterEventNotificationRemote(const ElementFqId event_id,
+                                           const IMessagePassingService::HandlerRegistrationNoType registration_no,
+                                           const pid_t target_node_id) noexcept;
+    void SendRegisterEventNotificationMessage(const ElementFqId event_id, const pid_t target_node_id) noexcept;
+
+    score::Result<void> CallSubscribeServiceMethodLocally(
+        const SkeletonInstanceIdentifier& skeleton_instance_identifier,
+        const ProxyInstanceIdentifier& proxy_instance_identifier,
+        const uid_t proxy_uid,
+        const pid_t proxy_pid);
+
+    score::Result<void> CallUnsubscribeServiceMethodLocally(
+        const SkeletonInstanceIdentifier& skeleton_instance_identifier,
+        const ProxyInstanceIdentifier& proxy_instance_identifier);
+
+    score::Result<void> CallServiceMethodLocally(const ProxyMethodInstanceIdentifier& proxy_method_instance_identifier,
+                                                 const std::size_t queue_position,
+                                                 const uid_t proxy_uid);
+
+    Result<void> CallSubscribeServiceMethodRemotely(const SkeletonInstanceIdentifier& skeleton_instance_identifier,
+                                                    const ProxyInstanceIdentifier& proxy_instance_identifier,
+                                                    const pid_t target_node_id);
+
+    Result<void> CallUnsubscribeServiceMethodRemotely(const SkeletonInstanceIdentifier& skeleton_instance_identifier,
+                                                      const ProxyInstanceIdentifier& proxy_instance_identifier,
+                                                      const pid_t target_node_id);
+
+    Result<void> CallServiceMethodRemotely(const ProxyMethodInstanceIdentifier& proxy_method_instance_identifier,
+                                           const std::size_t queue_position,
+                                           const pid_t target_node_id);
+
+    /// \brief Function to convert ClientQualityType to a QualityType
+    ///
+    /// (which encodes the client's QualityType plus whether the current process is an ASIL-B process communicating with
+    /// a QM client)
+    QualityType GetPartnerQualityType() const;
+
+    score::cpp::pmr::unique_ptr<score::message_passing::IServer> server_;
+
+    /// \brief Copies node identifiers (pid) contained within (container) values of a map into a given buffer under
+    ///        read-lock
+    /// \details
+    /// \tparam MapType Type of the Map. It is implicitly expected, that the key of MapType is of type ElementFqId
+    /// and
+    ///         the mapped_type is a std::set (or at least some forward iterable container type, which supports
+    ///         lower_bound()), which contains values, which directly or indirectly contain a node identifier
+    ///         (pid_t)
+    ///
+    /// \param event_id fully qualified event id for lookup in _src_map_
+    /// \param src_map map, where key_type = ElementFqId and mapped_type is some forward iterable container
+    /// \param src_map_mutex mutex to be used to lock the map during copying.
+    /// \param dest_buffer buffer, where to copy the node identifiers
+    /// \param start start identifier (pid_t) where to start search with.
+    ///
+    /// \return pair containing number of node identifiers, which have been copied and a bool, whether further ids
+    /// could
+    ///         have been copied, if buffer would have been larger.
+
+    template <typename MapType>
+    // Suppress "AUTOSAR C++14 A15-5-3" rule findings. This rule states: "The std::terminate() function shall not be
+    // called implicitly".
+    // This is a false positive: .at() could throw if the index is outside of the range of the container but it is
+    // checked before accessing the dest_buffer that the function will break as soon as the index is equal to the
+    // buffersize. So an access out of the range and consequently a call to std::terminate() is not possible.
+    // coverity[autosar_cpp14_a15_5_3_violation : FALSE]
+    static std::pair<std::uint32_t, bool> CopyNodeIdentifiers(ElementFqId event_id,
+                                                              MapType& src_map,
+                                                              std::shared_mutex& src_map_mutex,
+                                                              NodeIdTmpBufferType& dest_buffer,
+                                                              pid_t start) noexcept
+    {
+        std::uint32_t num_nodeids_copied{0U};
+        bool further_ids_avail{false};
+        // Suppress "AUTOSAR C++14 M0-1-3" rule findings. This rule states: "There shall be no dead code".
+        //  This is a RAII Pattern, which binds the life cycle of a resource that must be acquired before use.
+        // coverity[autosar_cpp14_m0_1_3_violation]
+        std::shared_lock<std::shared_mutex> read_lock(src_map_mutex);
+        if (src_map.empty() == false)
+        {
+            auto search = src_map.find(event_id);
+            if (search != src_map.end())
+            {
+                // we copy the target_node_identifiers to a tmp-array under lock ...
+                for (auto iter = search->second.lower_bound(start); iter != search->second.cend(); iter++)
+                {
+                    // Suppress "AUTOSAR C++14 M5-0-3" rule findings. This rule states: "A cvalue expression shall
+                    // not be implicitly converted to a different underlying type"
+                    // That return `pid_t` type as a result. Tolerated implicit conversion as underlying types are
+                    // the same
+                    // coverity[autosar_cpp14_m5_0_3_violation : FALSE]
+                    dest_buffer.at(num_nodeids_copied) = *iter;
+                    num_nodeids_copied++;
+                    if (num_nodeids_copied == dest_buffer.size())
+                    {
+                        if (std::distance(iter, search->second.cend()) > 1)
+                        {
+                            further_ids_avail = true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        return {num_nodeids_copied, further_ids_avail};
+    }
+
+    std::atomic<IMessagePassingService::HandlerRegistrationNoType> cur_registration_no_;
+    ClientQualityType asil_level_;
+    MessagePassingClientCache client_cache_;
+
+    // TODO: refactor for PMR/static
+
+    /// \brief map holding per event_id a list of notification/receive handlers registered by local proxy-event
+    ///        instances, which need to be called, when the event with given _event_id_ is updated.
+    EventUpdateNotifierMapType event_update_handlers_;
+
+    std::shared_mutex event_update_handlers_mutex_;
+
+    /// \brief map holding per event_id a callback to notify when handler registration status changes.
+    /// \details This allows SkeletonEvent instances to be notified when they transition from having
+    ///          no handlers to having at least one handler (or vice versa), avoiding unnecessary lock
+    ///          overhead in the main path when no handlers are registered.
+    std::unordered_map<ElementFqId, IMessagePassingService::HandlerStatusChangeCallback>
+        handler_status_change_callbacks_;
+
+    std::shared_mutex handler_status_change_callbacks_mutex_;
+
+    /// \brief map holding per event_id a list of remote LoLa nodes, which need to be informed, when the event with
+    ///        given _event_id_ is updated.
+    /// \note This is the symmetric data structure to event_update_handlers_, in case the proxy-event registering
+    ///       a receive handler is located in a different LoLa process.
+    EventUpdateNodeIdMapType event_update_interested_nodes_;
+
+    std::shared_mutex event_update_interested_nodes_mutex_;
+
+    /// \brief map holding per event_id a node counter, how many local proxy-event instances have registered a
+    ///       receive-handler for this event at the given node. This map only contains events provided by remote
+    ///       LoLa processes.
+    /// \note we maintain this data structure for performance reasons: We do NOT send for every
+    ///       RegisterEventNotification() call for a "remote" event X by a local proxy-event-instance a message
+    ///       to the given node redundantly! We rather do a smart (de)multiplexing here by counting the local
+    ///       registrars! If the counter goes from 0 to 1, we send a RegisterNotificationMessage to the remote node
+    ///       and we send an UnregisterNotificationMessage to the remote node, when the counter gets decremented to
+    ///       0 again.
+    EventUpdateRegistrationCountMapType event_update_remote_registrations_;
+
+    std::shared_mutex event_update_remote_registrations_mutex_;
+
+    SubscribeServiceMethodMapType subscribe_service_method_handlers_;
+
+    std::shared_mutex subscribe_service_method_handlers_mutex_;
+
+    using UnsubscribeServiceMethodMapType =
+        std::unordered_map<SkeletonInstanceIdentifier, IMessagePassingService::ServiceMethodUnsubscribedHandler>;
+
+    UnsubscribeServiceMethodMapType unsubscribe_service_method_handlers_;
+
+    std::shared_mutex unsubscribe_service_method_handlers_mutex_;
+
+    CallMethodMapType call_method_handlers_;
+
+    std::shared_mutex call_method_handlers_mutex_;
+
+    /// \brief executor for processing local event update notification.
+    /// \detail local update notification leads to a user provided receive handler callout, whose
+    ///         runtime is unknown, so we decouple with worker threads.
+    score::concurrency::Executor& executor_;
+
+    /// \brief Scope controlling the lifetime of message_callback_scoped_function_
+    /// \details When the scope is reset when object is destroyed, the scoped function becomes invalid
+    ///          and will not execute, preventing race conditions during destruction
+    score::safecpp::Scope<> message_callback_scope_;  // scope should always be the last attribute.
+
+    pid_t self_pid_;
+    uid_t self_uid_;
+};
+
+}  // namespace score::mw::com::impl::lola
+
+#endif  // SCORE_MW_COM_IMPL_BINDINGS_LOLA_MESSAGE_PASSING_SERVICE_INSTANCE_H

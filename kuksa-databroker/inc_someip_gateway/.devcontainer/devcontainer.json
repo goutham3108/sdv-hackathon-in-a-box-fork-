@@ -1,0 +1,47 @@
+{
+    "name": "eclipse-s-core",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "args": {
+            "USERNAME": "${localEnv:USER}"
+        }
+    },
+    "remoteUser": "${localEnv:USER}",
+    "runArgs": [
+        "--privileged",
+        "--device=/dev/kvm"
+    ],
+    "mounts": [
+        {
+            "source": "${localEnv:HOME}${localEnv:USERPROFILE}/.qnx/license/licenses",
+            "target": "/opt/score_qnx/license/licenses",
+            "type": "bind"
+        },
+        {
+            "source": "${localEnv:HOME}${localEnv:USERPROFILE}/.netrc",
+            "target": "/home/${localEnv:USER}/.netrc",
+            "type": "bind"
+        }
+    ],
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:3": {}
+    },
+    "initializeCommand": {
+        "Make sure QNX licenses exists": "mkdir -p ~/.qnx/license && touch -a ~/.qnx/license/licenses",
+        "Make sure .netrc exists": "touch -a ~/.netrc"
+    },
+    "onCreateCommand": {
+        "Setup external symlink": "[ -L external ] || ln -s \"bazel-$(basename $PWD)/external\" external"
+    },
+    "postStartCommand": "sudo chmod 666 /dev/kvm",
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "detachhead.basedpyright",
+                "akiramiyakoda.cppincludeguard",
+                "github.vscode-github-actions",
+                "streetsidesoftware.code-spell-checker"
+            ]
+        }
+    }
+}

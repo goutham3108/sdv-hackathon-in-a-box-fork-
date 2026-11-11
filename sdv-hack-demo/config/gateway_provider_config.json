@@ -1,0 +1,712 @@
+{
+    "provider_name": "gateway_mw_com_provider",
+    "queue_capacity": 256,
+    "stale_after_ms": 1000,
+    "mappings": [
+        {
+            "signal_id": 1,
+            "vss_path": "Vehicle.Body.Lights.Beam.High.IsOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "high_beam_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "high_beam_state"
+            }
+        },
+        {
+            "signal_id": 2,
+            "vss_path": "Vehicle.Body.Horn.IsActive",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "horn_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "horn_state"
+            }
+        },
+        {
+            "signal_id": 3,
+            "vss_path": "Vehicle.Body.Lights.IsHighBeamSwitchOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "high_beam_switch_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "high_beam_switch_state"
+            }
+        },
+        {
+            "signal_id": 4,
+            "vss_path": "Vehicle.Body.Lights.Parking.IsOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "parking_lights_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "parking_lights_state"
+            }
+        },
+        {
+            "signal_id": 5,
+            "vss_path": "Vehicle.Body.Lights.Running.IsOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "running_lights_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "running_lights_state"
+            }
+        },
+        {
+            "signal_id": 6,
+            "vss_path": "Vehicle.Body.Lights.Fog.Front.IsOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "front_fog_lights_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "front_fog_lights_state"
+            }
+        },
+        {
+            "signal_id": 7,
+            "vss_path": "Vehicle.Body.Lights.Fog.Rear.IsOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "rear_fog_lights_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "rear_fog_lights_state"
+            }
+        },
+        {
+            "signal_id": 8,
+            "vss_path": "Vehicle.Body.Lights.Hazard.IsSignaling",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "hazard_lights_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "hazard_lights_state"
+            }
+        },
+        {
+            "signal_id": 9,
+            "vss_path": "Vehicle.Body.Lights.DirectionIndicator.Left.IsSignaling",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "left_indicator_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "left_indicator_state"
+            }
+        },
+        {
+            "signal_id": 10,
+            "vss_path": "Vehicle.Body.Lights.DirectionIndicator.Right.IsSignaling",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "right_indicator_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "right_indicator_state"
+            }
+        },
+        {
+            "signal_id": 11,
+            "vss_path": "Vehicle.Body.Lights.Brake.IsActive",
+            "datatype": "string",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "brake_lights_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "brake_lights_state"
+            }
+        },
+        {
+            "signal_id": 12,
+            "vss_path": "Vehicle.Body.Hood.IsOpen",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "hood_open_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "hood_open_state"
+            }
+        },
+        {
+            "signal_id": 13,
+            "vss_path": "Vehicle.Body.Trunk.Rear.IsOpen",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "rear_trunk_open_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "rear_trunk_open_state"
+            }
+        },
+        {
+            "signal_id": 14,
+            "vss_path": "Vehicle.Body.Trunk.Rear.IsLocked",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "rear_trunk_locked_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "rear_trunk_locked_state"
+            }
+        },
+        {
+            "signal_id": 15,
+            "vss_path": "Vehicle.Body.Trunk.Rear.Position",
+            "datatype": "uint8",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "rear_trunk_position_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "min": 0,
+            "max": 100,
+            "unit": "percent",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "rear_trunk_position_state"
+            }
+        },
+        {
+            "signal_id": 16,
+            "vss_path": "Vehicle.Body.Mirrors.DriverSide.IsFolded",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "driver_mirror_folded_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "driver_mirror_folded_state"
+            }
+        },
+        {
+            "signal_id": 17,
+            "vss_path": "Vehicle.Body.Mirrors.PassengerSide.IsFolded",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "passenger_mirror_folded_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "passenger_mirror_folded_state"
+            }
+        },
+        {
+            "signal_id": 18,
+            "vss_path": "Vehicle.Body.Mirrors.DriverSide.IsHeatingOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "driver_mirror_heating_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "driver_mirror_heating_state"
+            }
+        },
+        {
+            "signal_id": 19,
+            "vss_path": "Vehicle.Body.Mirrors.PassengerSide.IsHeatingOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "passenger_mirror_heating_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "passenger_mirror_heating_state"
+            }
+        },
+        {
+            "signal_id": 20,
+            "vss_path": "Vehicle.Body.Windshield.Front.Wiping.Mode",
+            "datatype": "string",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "front_wiping_mode_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "front_wiping_mode_state"
+            }
+        },
+        {
+            "signal_id": 21,
+            "vss_path": "Vehicle.Body.Windshield.Front.Wiping.Intensity",
+            "datatype": "uint8",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "front_wiping_intensity_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "min": 0,
+            "max": 100,
+            "unit": "percent",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "front_wiping_intensity_state"
+            }
+        },
+        {
+            "signal_id": 22,
+            "vss_path": "Vehicle.Body.Windshield.Front.WasherFluid.Level",
+            "datatype": "uint8",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "front_washer_fluid_level_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "min": 0,
+            "max": 100,
+            "unit": "percent",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "front_washer_fluid_level_state"
+            }
+        },
+        {
+            "signal_id": 23,
+            "vss_path": "Vehicle.Body.Windshield.Front.WasherFluid.IsLevelLow",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "front_washer_fluid_low_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "front_washer_fluid_low_state"
+            }
+        },
+        {
+            "signal_id": 24,
+            "vss_path": "Vehicle.Body.Raindetection.Intensity",
+            "datatype": "uint8",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "rain_intensity_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "min": 0,
+            "max": 100,
+            "unit": "percent",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "rain_intensity_state"
+            }
+        },
+        {
+            "signal_id": 25,
+            "vss_path": "Vehicle.Body.Windshield.Front.IsHeatingOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "front_windshield_heating_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "front_windshield_heating_state"
+            }
+        },
+        {
+            "signal_id": 26,
+            "vss_path": "Vehicle.Body.Windshield.Rear.IsHeatingOn",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "rear_windshield_heating_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "rear_windshield_heating_state"
+            }
+        },
+        {
+            "signal_id": 27,
+            "vss_path": "Vehicle.Cabin.Door.Row1.DriverSide.IsLocked",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row1_driver_door_locked_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row1_driver_door_locked_state"
+            }
+        },
+        {
+            "signal_id": 28,
+            "vss_path": "Vehicle.Cabin.Door.Row1.DriverSide.IsOpen",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row1_driver_door_open_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row1_driver_door_open_state"
+            }
+        },
+        {
+            "signal_id": 29,
+            "vss_path": "Vehicle.Cabin.Door.Row1.DriverSide.Window.Position",
+            "datatype": "uint8",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row1_driver_window_position_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "min": 0,
+            "max": 100,
+            "unit": "percent",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row1_driver_window_position_state"
+            }
+        },
+        {
+            "signal_id": 30,
+            "vss_path": "Vehicle.Cabin.Door.Row1.DriverSide.IsChildLockActive",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row1_driver_child_lock_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row1_driver_child_lock_state"
+            }
+        },
+        {
+            "signal_id": 31,
+            "vss_path": "Vehicle.Cabin.Door.Row1.PassengerSide.IsLocked",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row1_passenger_door_locked_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row1_passenger_door_locked_state"
+            }
+        },
+        {
+            "signal_id": 32,
+            "vss_path": "Vehicle.Cabin.Door.Row1.PassengerSide.IsOpen",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row1_passenger_door_open_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row1_passenger_door_open_state"
+            }
+        },
+        {
+            "signal_id": 33,
+            "vss_path": "Vehicle.Cabin.Door.Row1.PassengerSide.Window.Position",
+            "datatype": "uint8",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row1_passenger_window_position_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "min": 0,
+            "max": 100,
+            "unit": "percent",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row1_passenger_window_position_state"
+            }
+        },
+        {
+            "signal_id": 34,
+            "vss_path": "Vehicle.Cabin.Door.Row2.DriverSide.IsLocked",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row2_driver_door_locked_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row2_driver_door_locked_state"
+            }
+        },
+        {
+            "signal_id": 35,
+            "vss_path": "Vehicle.Cabin.Door.Row2.DriverSide.IsOpen",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row2_driver_door_open_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row2_driver_door_open_state"
+            }
+        },
+        {
+            "signal_id": 36,
+            "vss_path": "Vehicle.Cabin.Door.Row2.PassengerSide.IsLocked",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row2_passenger_door_locked_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row2_passenger_door_locked_state"
+            }
+        },
+        {
+            "signal_id": 37,
+            "vss_path": "Vehicle.Cabin.Door.Row2.PassengerSide.IsOpen",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "row2_passenger_door_open_state",
+            "direction": "bidirectional",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "actuation_binding": {
+                "service": "/body_control_module_tx",
+                "instance": "local_tx",
+                "member": "row2_passenger_door_open_state"
+            }
+        },
+        {
+            "signal_id": 38,
+            "vss_path": "Vehicle.Powertrain.CombustionEngine.IsRunning",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "engine_running_state",
+            "direction": "datapoint",
+            "cycle_time_ms": 100,
+            "required_quality": "valid"
+        },
+        {
+            "signal_id": 39,
+            "vss_path": "Vehicle.OBD.OilTemperature",
+            "datatype": "float",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "oil_temperature_state",
+            "direction": "datapoint",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "unit": "celsius"
+        },
+        {
+            "signal_id": 40,
+            "vss_path": "Vehicle.Powertrain.TractionBattery.CellVoltage.CellVoltages",
+            "datatype": "float_array",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "cell_voltages_state",
+            "direction": "datapoint",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "unit": "V",
+            "max_elements": 8
+        },
+        {
+            "signal_id": 41,
+            "vss_path": "Vehicle.Acceleration.Vertical",
+            "datatype": "float",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "vertical_acceleration_state",
+            "direction": "datapoint",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "unit": "m/s^2"
+        },
+        {
+            "signal_id": 42,
+            "vss_path": "Vehicle.Chassis.Brake.PedalPosition",
+            "datatype": "uint8",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "brake_pedal_position_state",
+            "direction": "datapoint",
+            "cycle_time_ms": 100,
+            "required_quality": "valid",
+            "min": 0,
+            "max": 100,
+            "unit": "percent"
+        },
+        {
+            "signal_id": 43,
+            "vss_path": "Vehicle.Powertrain.FuelSystem.IsEngineStopStartEnabled",
+            "datatype": "bool",
+            "service": "/body_control_module_rx",
+            "instance": "network_rx",
+            "member": "engine_stop_start_enabled_state",
+            "direction": "datapoint",
+            "cycle_time_ms": 100,
+            "required_quality": "valid"
+        },
+        {
+            "signal_id": 44,
+            "vss_path": "Vehicle.Powertrain.Transmission.PerformanceMode",
+            "datatype": "string",
+            "service": "/body_control_module_tx",
+            "instance": "local_tx",
+            "member": "transmission_performance_mode_state",
+            "direction": "actuator",
+            "cycle_time_ms": 100,
+            "required_quality": "valid"
+        },
+        {
+            "signal_id": 45,
+            "vss_path": "Vehicle.Speed",
+            "datatype": "float",
+            "service": "VehicleDynamicsService",
+            "instance": "network_rx",
+            "member": "speed",
+            "direction": "datapoint",
+            "unit": "km/h",
+            "cycle_time_ms": 100
+        }
+    ]
+}

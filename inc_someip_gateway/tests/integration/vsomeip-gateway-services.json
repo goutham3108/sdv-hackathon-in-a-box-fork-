@@ -1,0 +1,989 @@
+{
+    "unicast": "127.0.0.1",
+    "logging": {
+        "level": "warning",
+        "console": "true"
+    },
+    "applications": [
+        {
+            "name": "someipd",
+            "id": "0x0100"
+        },
+        {
+            "name": "udp_bridge_vehicle_side",
+            "id": "0x0204"
+        }
+    ],
+    "services": [
+        {
+            "service": "0x4300",
+            "instance": "0x1000",
+            "unreliable": "31002",
+            "events": [
+                {
+                    "event": "0x8430",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8434",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8436",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8438",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x843a",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x843c",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x843e",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8440",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8442",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8444",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8446",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8448",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x844a",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x844c",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x844e",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8450",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8452",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8454",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8456",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8458",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x845a",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x845c",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x845e",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8460",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8462",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8464",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8466",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8468",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x846a",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x846c",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x846e",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8470",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8472",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8474",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8476",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8478",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x847a",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x847c",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x847e",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8480",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8482",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8484",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8486",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8488",
+                    "is_field": "false"
+                }
+            ],
+            "eventgroups": [
+                {
+                    "eventgroup": "0x8430",
+                    "events": [
+                        "0x8430"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8434",
+                    "events": [
+                        "0x8434"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8436",
+                    "events": [
+                        "0x8436"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8438",
+                    "events": [
+                        "0x8438"
+                    ]
+                },
+                {
+                    "eventgroup": "0x843a",
+                    "events": [
+                        "0x843a"
+                    ]
+                },
+                {
+                    "eventgroup": "0x843c",
+                    "events": [
+                        "0x843c"
+                    ]
+                },
+                {
+                    "eventgroup": "0x843e",
+                    "events": [
+                        "0x843e"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8440",
+                    "events": [
+                        "0x8440"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8442",
+                    "events": [
+                        "0x8442"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8444",
+                    "events": [
+                        "0x8444"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8446",
+                    "events": [
+                        "0x8446"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8448",
+                    "events": [
+                        "0x8448"
+                    ]
+                },
+                {
+                    "eventgroup": "0x844a",
+                    "events": [
+                        "0x844a"
+                    ]
+                },
+                {
+                    "eventgroup": "0x844c",
+                    "events": [
+                        "0x844c"
+                    ]
+                },
+                {
+                    "eventgroup": "0x844e",
+                    "events": [
+                        "0x844e"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8450",
+                    "events": [
+                        "0x8450"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8452",
+                    "events": [
+                        "0x8452"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8454",
+                    "events": [
+                        "0x8454"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8456",
+                    "events": [
+                        "0x8456"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8458",
+                    "events": [
+                        "0x8458"
+                    ]
+                },
+                {
+                    "eventgroup": "0x845a",
+                    "events": [
+                        "0x845a"
+                    ]
+                },
+                {
+                    "eventgroup": "0x845c",
+                    "events": [
+                        "0x845c"
+                    ]
+                },
+                {
+                    "eventgroup": "0x845e",
+                    "events": [
+                        "0x845e"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8460",
+                    "events": [
+                        "0x8460"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8462",
+                    "events": [
+                        "0x8462"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8464",
+                    "events": [
+                        "0x8464"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8466",
+                    "events": [
+                        "0x8466"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8468",
+                    "events": [
+                        "0x8468"
+                    ]
+                },
+                {
+                    "eventgroup": "0x846a",
+                    "events": [
+                        "0x846a"
+                    ]
+                },
+                {
+                    "eventgroup": "0x846c",
+                    "events": [
+                        "0x846c"
+                    ]
+                },
+                {
+                    "eventgroup": "0x846e",
+                    "events": [
+                        "0x846e"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8470",
+                    "events": [
+                        "0x8470"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8472",
+                    "events": [
+                        "0x8472"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8474",
+                    "events": [
+                        "0x8474"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8476",
+                    "events": [
+                        "0x8476"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8478",
+                    "events": [
+                        "0x8478"
+                    ]
+                },
+                {
+                    "eventgroup": "0x847a",
+                    "events": [
+                        "0x847a"
+                    ]
+                },
+                {
+                    "eventgroup": "0x847c",
+                    "events": [
+                        "0x847c"
+                    ]
+                },
+                {
+                    "eventgroup": "0x847e",
+                    "events": [
+                        "0x847e"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8480",
+                    "events": [
+                        "0x8480"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8482",
+                    "events": [
+                        "0x8482"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8484",
+                    "events": [
+                        "0x8484"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8486",
+                    "events": [
+                        "0x8486"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8488",
+                    "events": [
+                        "0x8488"
+                    ]
+                }
+            ]
+        },
+        {
+            "service": "0x4300",
+            "instance": "0x1001",
+            "unreliable": "31003",
+            "events": [
+                {
+                    "event": "0x8431",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8435",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8437",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8439",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x843b",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x843d",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x843f",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8441",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8443",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8445",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8447",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8449",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x844b",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x844d",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x844f",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8451",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8453",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8455",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8457",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8459",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x845b",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x845d",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x845f",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8461",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8463",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8465",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8467",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8469",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x846b",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x846d",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x846f",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8471",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8473",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8475",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8477",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8479",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x847b",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x847d",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x847f",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8481",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8483",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8485",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8487",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x8489",
+                    "is_field": "false"
+                }
+            ],
+            "eventgroups": [
+                {
+                    "eventgroup": "0x8431",
+                    "events": [
+                        "0x8431"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8435",
+                    "events": [
+                        "0x8435"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8437",
+                    "events": [
+                        "0x8437"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8439",
+                    "events": [
+                        "0x8439"
+                    ]
+                },
+                {
+                    "eventgroup": "0x843b",
+                    "events": [
+                        "0x843b"
+                    ]
+                },
+                {
+                    "eventgroup": "0x843d",
+                    "events": [
+                        "0x843d"
+                    ]
+                },
+                {
+                    "eventgroup": "0x843f",
+                    "events": [
+                        "0x843f"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8441",
+                    "events": [
+                        "0x8441"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8443",
+                    "events": [
+                        "0x8443"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8445",
+                    "events": [
+                        "0x8445"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8447",
+                    "events": [
+                        "0x8447"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8449",
+                    "events": [
+                        "0x8449"
+                    ]
+                },
+                {
+                    "eventgroup": "0x844b",
+                    "events": [
+                        "0x844b"
+                    ]
+                },
+                {
+                    "eventgroup": "0x844d",
+                    "events": [
+                        "0x844d"
+                    ]
+                },
+                {
+                    "eventgroup": "0x844f",
+                    "events": [
+                        "0x844f"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8451",
+                    "events": [
+                        "0x8451"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8453",
+                    "events": [
+                        "0x8453"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8455",
+                    "events": [
+                        "0x8455"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8457",
+                    "events": [
+                        "0x8457"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8459",
+                    "events": [
+                        "0x8459"
+                    ]
+                },
+                {
+                    "eventgroup": "0x845b",
+                    "events": [
+                        "0x845b"
+                    ]
+                },
+                {
+                    "eventgroup": "0x845d",
+                    "events": [
+                        "0x845d"
+                    ]
+                },
+                {
+                    "eventgroup": "0x845f",
+                    "events": [
+                        "0x845f"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8461",
+                    "events": [
+                        "0x8461"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8463",
+                    "events": [
+                        "0x8463"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8465",
+                    "events": [
+                        "0x8465"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8467",
+                    "events": [
+                        "0x8467"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8469",
+                    "events": [
+                        "0x8469"
+                    ]
+                },
+                {
+                    "eventgroup": "0x846b",
+                    "events": [
+                        "0x846b"
+                    ]
+                },
+                {
+                    "eventgroup": "0x846d",
+                    "events": [
+                        "0x846d"
+                    ]
+                },
+                {
+                    "eventgroup": "0x846f",
+                    "events": [
+                        "0x846f"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8471",
+                    "events": [
+                        "0x8471"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8473",
+                    "events": [
+                        "0x8473"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8475",
+                    "events": [
+                        "0x8475"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8477",
+                    "events": [
+                        "0x8477"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8479",
+                    "events": [
+                        "0x8479"
+                    ]
+                },
+                {
+                    "eventgroup": "0x847b",
+                    "events": [
+                        "0x847b"
+                    ]
+                },
+                {
+                    "eventgroup": "0x847d",
+                    "events": [
+                        "0x847d"
+                    ]
+                },
+                {
+                    "eventgroup": "0x847f",
+                    "events": [
+                        "0x847f"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8481",
+                    "events": [
+                        "0x8481"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8483",
+                    "events": [
+                        "0x8483"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8485",
+                    "events": [
+                        "0x8485"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8487",
+                    "events": [
+                        "0x8487"
+                    ]
+                },
+                {
+                    "eventgroup": "0x8489",
+                    "events": [
+                        "0x8489"
+                    ]
+                }
+            ]
+        },
+        {
+            "service": "0x1921",
+            "instance": "0x0001",
+            "unreliable": "31004",
+            "events": [
+                {
+                    "event": "0x0001",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x0002",
+                    "is_field": "false"
+                }
+            ],
+            "eventgroups": [
+                {
+                    "eventgroup": "0x0001",
+                    "events": [
+                        "0x0001"
+                    ]
+                },
+                {
+                    "eventgroup": "0x0002",
+                    "events": [
+                        "0x0002"
+                    ]
+                }
+            ]
+        },
+        {
+            "service": "0x1921",
+            "instance": "0x0002",
+            "unreliable": "31005",
+            "events": [
+                {
+                    "event": "0x0001",
+                    "is_field": "false"
+                },
+                {
+                    "event": "0x0002",
+                    "is_field": "false"
+                }
+            ],
+            "eventgroups": [
+                {
+                    "eventgroup": "0x0001",
+                    "events": [
+                        "0x0001"
+                    ]
+                },
+                {
+                    "eventgroup": "0x0002",
+                    "events": [
+                        "0x0002"
+                    ]
+                }
+            ]
+        }
+    ],
+    "routing": "someipd",
+    "service-discovery": {
+        "enable": "true",
+        "multicast": "224.244.224.245",
+        "port": "30490",
+        "protocol": "udp",
+        "initial_delay_min": "10",
+        "initial_delay_max": "100",
+        "repetitions_base_delay": "200",
+        "repetitions_max": "3",
+        "ttl": "3",
+        "cyclic_offer_delay": "2000",
+        "request_response_delay": "1500"
+    }
+}

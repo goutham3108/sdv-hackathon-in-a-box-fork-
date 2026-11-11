@@ -1,0 +1,26 @@
+/patch/sdv-runtime/
+
+# Bazel output links and Rust build outputs
+bazel-*
+target/
+
+# Demo deployment artifacts
+/sdv-hack-demo/dist/
+*.tar
+*.tar.gz
+*.tgz
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Local KUKSA credentials
+/kuksa-databroker/**/*.key
+/kuksa-databroker/**/*.p12
+/kuksa-databroker/**/*.pfx
+/kuksa-databroker/**/*.token
+/kuksa-databroker/**/*.jwt
+/kuksa-databroker/**/.env
+/kuksa-databroker/**/.env.*
+/kuksa-databroker/communication/quality/integration_testing/environments/qnx8_qemu/init_x86_64.build
+/kuksa-databroker/inc_someip_gateway/quality/integration_testing/environments/qnx8_qemu/init_x86_64.build

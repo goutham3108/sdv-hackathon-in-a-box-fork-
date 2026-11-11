@@ -1,0 +1,19 @@
+{
+    "ecuId": "ECU1",
+    "appId": "UNKN",
+    "logLevel": "kInfo",
+    "logMode": "kRemote|kConsole|kFile|kSystem",
+    "contextConfigs": [
+        {
+            "name": "vcip",
+            "logLevel": "kError"
+        },
+        {
+            "name": "vcom",
+            "logLevel": "kOff"
+        }
+    ],
+    "stackBufferSize": 3000,
+    "ringBufferSize": 4096,
+    "logLevelThresholdConsole": ""
+}

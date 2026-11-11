@@ -1,0 +1,105 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# =============================================================================
+# Deployment packages — one build invocation targets one platform.
+#
+# Pass --config to select the cross-compilation toolchain:
+#   x86_64-linux    Linux / x86_64   (developer workstation)
+#   aarch64-linux   Linux / aarch64  (e.g. Raspberry Pi 4 + Ubuntu)
+#   x86_64-qnx     QNX 8 / x86_64
+#   aarch64-qnx    QNX 8 / aarch64  (e.g. Raspberry Pi 4 + QNX 8)
+#
+# The output archive name contains the CPU identifier from the active toolchain
+# (e.g. "aarch64" for both aarch64-linux and aarch64-qnx builds).
+#
+# Build individual packages:
+#   bazel build //deployment:gateway_tar    --config=aarch64-linux
+#   bazel build //deployment:benchmarks_tar --config=aarch64-linux
+#
+# Build all packages for a platform in one invocation:
+#   bazel build //deployment:all_tars --config=aarch64-linux
+#
+# Repeat with a different --config to produce packages for another platform.
+# =============================================================================
+
+load("@rules_pkg//pkg:mappings.bzl", "pkg_files")
+load(":defs.bzl", "names_from_toolchains", "scoreipgw_pkg_tar")
+
+names_from_toolchains(
+    name = "toolchain_vars",
+)
+
+# Config files are renamed and flattened to the package root so that
+# run_gateway.sh can reference them via ${SCRIPT_DIR}/<filename>.
+pkg_files(
+    name = "gatewayd_config_files",
+    srcs = [
+        "//score/config:config_file",
+        "//score/gatewayd:etc/mw_com_config.json",
+    ],
+    renames = {
+        "//score/config:config_file": "gatewayd_config.bin",
+        "//score/gatewayd:etc/mw_com_config.json": "gatewayd_mw_com_config.json",
+    },
+)
+
+# =============================================================================
+# gateway_tar — gateway daemon package
+#
+# Contains: gatewayd, someipd (with Bazel runfiles), default configs, and
+#           run_gateway.sh for easy startup on the target machine.
+#
+# The archive is named gateway_tar-<cpu>.tar.gz, where <cpu> is the CPU
+# identifier resolved by the active toolchain (e.g. gateway_tar-aarch64.tar.gz
+# when using --config=aarch64-linux or --config=aarch64-qnx).
+#
+# Deploy on the target:
+#   tar xzf gateway_tar-<cpu>.tar.gz
+#   export VSOMEIP_CONFIGURATION=/path/to/vsomeip.json
+#   ./score_someip_gateway/gateway/run_gateway.sh gatewayd   # terminal 1
+#   ./score_someip_gateway/gateway/run_gateway.sh someipd    # terminal 2
+# =============================================================================
+
+scoreipgw_pkg_tar(
+    name = "gateway_tar",
+    srcs = [
+        "run_gateway.sh",
+        ":gatewayd_config_files",
+        "//score/gatewayd",
+        "//score/someipd",
+    ],
+    package_dir = module_name() + "/gateway",
+)
+
+scoreipgw_pkg_tar(
+    name = "benchmarks_tar",
+    srcs = [
+        "//tests/benchmarks:echo_server",
+        "//tests/benchmarks:ipc_benchmarks",
+    ],
+    package_dir = module_name() + "/benchmarks",
+)
+
+# =============================================================================
+# Convenience target
+# =============================================================================
+
+filegroup(
+    name = "all_tars",
+    srcs = [
+        ":benchmarks_tar",
+        ":gateway_tar",
+    ],
+    visibility = ["//visibility:public"],
+)

@@ -1,0 +1,146 @@
+<mxfile host="65bd71144e">
+    <diagram id="vehicle-speed-e2e" name="High-beam signal end-to-end">
+        <mxGraphModel dx="3557" dy="1006" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="subtitle" parent="1" style="text;html=1;strokeColor=none;fillColor=#E8F1FB;align=left;verticalAlign=middle;fontSize=12;fontColor=#4D4D4D;" value="gatewayd uses mw::com GenericProxy/GenericSkeleton over SHM; the bridge converts vehicle SOME/IP events to UDP and converts remote UDP frames back to SOME/IP." vertex="1">
+                    <mxGeometry height="25" width="1100" x="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="parentBoundary" parent="1" style="swimlane;html=1;startSize=28;rounded=0;fillColor=#F5F5F5;swimlaneFillColor=#E8F1FB;strokeColor=#6C8EBF;fontStyle=1;fontSize=14;" value="reference_integration_fork (parent workspace)" vertex="1">
+                    <mxGeometry height="685" width="320" x="-110" y="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="app" parent="parentBoundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=15;fontStyle=1;" value="Vehicle app&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;mw::com publisher and subscriber&lt;br&gt;user input: true | false&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="70" width="240" x="45" y="189.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="gatewayBoundary" parent="1" style="swimlane;html=1;startSize=28;rounded=0;fillColor=#F5F5F5;swimlaneFillColor=#FFF2CC;strokeColor=#D6B656;fontStyle=1;fontSize=14;" value="inc_someip_gateway (nested repository)" vertex="1">
+                    <mxGeometry height="680" width="910" x="320" y="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="mwShm" parent="gatewayBoundary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="mw::com shared-memory binding&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;service / instance / member&lt;br&gt;high_beam_state (1 byte: 0x00 or 0x01)&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="100" width="185" x="40" y="230" as="geometry"/>
+                </mxCell>
+                <mxCell id="peerBoundary" parent="1" style="swimlane;html=1;startSize=28;rounded=0;fillColor=#F5F5F5;swimlaneFillColor=#D5E8D4;strokeColor=#82B366;fontStyle=1;fontSize=14;" value="Remote RPi / sensor application" vertex="1">
+                    <mxGeometry height="680" width="330" x="1650" y="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="txSkeleton" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="Tx GenericSkeleton&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;vehicle_high_beam/local_tx&lt;br&gt;Vehicle input publishes 0x8430&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="70" width="250" x="-65" y="165" as="geometry"/>
+                </mxCell>
+                <mxCell id="rxProxy" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=13;" value="Rx GenericProxy&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;vehicle_high_beam/network_rx&lt;br&gt;subscribes and prints High.IsOn=true|false&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="75" width="250" x="-65" y="500" as="geometry"/>
+                </mxCell>
+                <mxCell id="gatewayd" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=14;fontStyle=1;" value="gatewayd&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Tx: GenericProxy consumes local mw::com/SHM&lt;br&gt;Rx: GenericSkeleton offers local mw::com/SHM&lt;br&gt;SOCom/gateway IPC to someipd; no UDP socket&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="120" width="180" x="680" y="279.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="gatewayIpc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontSize=13;" value="gateway IPC / SOCom&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;control plane + shared-memory payload metadata&lt;br&gt;gatewayd &lt;-&gt; someipd&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="100" width="145" x="980" y="235" as="geometry"/>
+                </mxCell>
+                <mxCell id="someipd" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#DAE8FC;strokeColor=#6C8EBF;fontSize=14;fontStyle=1;" value="someipd&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;sole local SOME/IP implementation&lt;br&gt;vSomeIP network binding&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="110" width="135" x="870" y="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="network" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=13;fontStyle=1;" value="UDP network&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;vehicle bridge sends to&lt;br&gt;SDV_REMOTE_IP:35001&lt;br&gt;remote sends to&lt;br&gt;SDV_VEHICLE_IP:35000&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="100" width="190" x="1400" y="347.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="peer" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=14;fontStyle=1;" value="udp_bridge&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Vehicle RPi network bridge&lt;br&gt;SOME/IP event &lt;-&gt; 16-byte UDP frame&lt;br&gt;service / instance / event / value&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="100" width="220" x="1110" y="347.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="remoteApp" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontSize=14;fontStyle=1;" value="Remote sensor app&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;decodes UDP as SOME/IP event&lt;br&gt;publishes sensor state every 2 seconds&lt;/font&gt;" vertex="1">
+                    <mxGeometry height="75" width="220" x="1720" y="359.5" as="geometry"/>
+                </mxCell>
+                <mxCell id="txService" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="Tx service: vehicle_high_beam_tx&lt;br&gt;0x4300 / 0x1000 / eventgroup 0x8430" vertex="1">
+                    <mxGeometry height="50" width="290" x="420" y="135" as="geometry"/>
+                </mxCell>
+                <mxCell id="rxService" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF2CC;strokeColor=#D6B656;fontSize=12;" value="Rx service: vehicle_high_beam_rx&lt;br&gt;0x4300 / 0x1001 / eventgroup 0x8431" vertex="1">
+                    <mxGeometry height="50" width="290" x="720" y="670" as="geometry"/>
+                </mxCell>
+                <mxCell id="txEdgeApp" edge="1" parent="1" source="txSkeleton" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;strokeWidth=2;fontColor=#7A1F1F;endArrow=block;endFill=1;" target="mwShm" value="1. Vehicle user input publishes High.IsOn">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="txEdgeGateway" edge="1" parent="1" source="mwShm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;strokeWidth=2;fontColor=#7A1F1F;endArrow=block;endFill=1;" target="gatewayd" value="2. GenericProxy reads SHM sample">
+                    <mxGeometry relative="1" x="-0.1538" y="-70" as="geometry">
+                        <mxPoint x="-62" y="71" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="txEdgeIpc" edge="1" parent="1" source="gatewayd" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;strokeWidth=2;fontColor=#7A1F1F;endArrow=block;endFill=1;" target="gatewayIpc" value="3. gatewayd serializes payload to IPC">
+                    <mxGeometry relative="1" x="0.2" y="-71" as="geometry">
+                        <mxPoint x="-10" y="-1" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="txEdgeSomeipd" edge="1" parent="1" source="gatewayIpc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;strokeWidth=2;fontColor=#7A1F1F;endArrow=block;endFill=1;" target="someipd" value="4. someipd sends SOME/IP event 0x8430">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="txEdgeNetwork" edge="1" parent="1" source="peer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;strokeWidth=2;fontColor=#7A1F1F;endArrow=block;endFill=1;" target="network" value="6. bridge encodes SOME/IP event as UDP frame">
+                    <mxGeometry relative="1" x="0.1643" y="-10" as="geometry">
+                        <mxPoint x="-1" as="offset"/>
+                        <Array as="points">
+                            <mxPoint x="1140" y="538"/>
+                            <mxPoint x="1140" y="400"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="txEdgePeer" edge="1" parent="1" source="someipd" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;strokeWidth=2;fontColor=#7A1F1F;endArrow=block;endFill=1;" target="peer" value="5. someipd delivers event 0x8430 to the network bridge">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="txEdgeRemoteApp" edge="1" parent="1" source="network" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#B85450;strokeWidth=2;fontColor=#7A1F1F;endArrow=block;endFill=1;" target="remoteApp" value="7. UDP frame received and decoded as SOME/IP">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="rxEdgeRemoteApp" edge="1" parent="1" source="remoteApp" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1F6E43;strokeWidth=2;fontColor=#16552F;endArrow=block;endFill=1;" target="network" value="8. Sensor state encoded as UDP frame">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1865" y="500"/>
+                            <mxPoint x="1660" y="500"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rxEdgePeer" edge="1" parent="1" source="network" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1F6E43;strokeWidth=2;fontColor=#16552F;endArrow=block;endFill=1;" target="peer" value="9. network bridge decodes UDP and publishes SOME/IP 0x8431">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1645" y="657.5"/>
+                            <mxPoint x="1425" y="657.5"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rxEdgeSomeipd" edge="1" parent="1" source="peer" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1F6E43;strokeWidth=2;fontColor=#16552F;endArrow=block;endFill=1;" target="someipd" value="10. network bridge delivers event 0x8431 to someipd">
+                    <mxGeometry relative="1" x="-0.4391" y="12" as="geometry">
+                        <mxPoint as="offset"/>
+                        <Array as="points">
+                            <mxPoint x="1190" y="438"/>
+                            <mxPoint x="1190" y="610"/>
+                            <mxPoint x="960" y="610"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rxEdgeIpc" edge="1" parent="1" source="someipd" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1F6E43;strokeWidth=2;fontColor=#16552F;endArrow=block;endFill=1;" target="gatewayIpc" value="11. someipd delivers network payload to IPC">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="rxEdgeGateway" edge="1" parent="1" source="gatewayIpc" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1F6E43;strokeWidth=2;fontColor=#16552F;endArrow=block;endFill=1;" target="gatewayd" value="12. gatewayd deserializes and sends via GenericSkeleton">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="860" y="485"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rxEdgeShm" edge="1" parent="1" source="gatewayd" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1F6E43;strokeWidth=2;fontColor=#16552F;endArrow=block;endFill=1;" target="mwShm" value="13. mw::com event">
+                    <mxGeometry relative="1" x="-0.3115" y="5" as="geometry">
+                        <mxPoint as="offset"/>
+                        <Array as="points">
+                            <mxPoint x="640" y="485"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="rxEdgeApp" edge="1" parent="1" source="mwShm" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#1F6E43;strokeWidth=2;fontColor=#16552F;endArrow=block;endFill=1;" target="rxProxy" value="14. GenericProxy receives High.IsOn=false">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="355" y="475"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="legendTx" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8CECC;strokeColor=#B85450;fontColor=#7A1F1F;fontSize=12;" value="Tx: parent local publisher to SOME/IP peer" vertex="1">
+                    <mxGeometry height="30" width="260" x="-80" y="705" as="geometry"/>
+                </mxCell>
+                <mxCell id="legendRx" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#D5E8D4;strokeColor=#82B366;fontColor=#16552F;fontSize=12;" value="Rx: SOME/IP peer to parent local subscriber" vertex="1">
+                    <mxGeometry height="30" width="260" x="-80" y="740" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

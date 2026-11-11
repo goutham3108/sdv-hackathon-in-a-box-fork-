@@ -1,0 +1,89 @@
+diff --git a/implementation/endpoints/include/asio_tcp_socket.hpp b/implementation/endpoints/include/asio_tcp_socket.hpp
+index 22ec4db1..e5783fa2 100644
+--- a/implementation/endpoints/include/asio_tcp_socket.hpp
++++ b/implementation/endpoints/include/asio_tcp_socket.hpp
+@@ -6,6 +6,13 @@
+ #ifndef VSOMEIP_V3_ASIO_TCP_SOCKET_HPP_
+ #define VSOMEIP_V3_ASIO_TCP_SOCKET_HPP_
+ 
++#ifdef __QNX__
++#include <sys/socket.h>
++#ifndef SO_BINDTODEVICE
++#define SO_BINDTODEVICE 0x0800
++#endif
++#endif
++
+ #include "tcp_socket.hpp"
+ 
+ #include <boost/asio/write.hpp>
+diff --git a/implementation/utility/src/wrappers_qnx.cpp b/implementation/utility/src/wrappers_qnx.cpp
+index 77c261cc..6e5a71b7 100644
+--- a/implementation/utility/src/wrappers_qnx.cpp
++++ b/implementation/utility/src/wrappers_qnx.cpp
+@@ -5,10 +5,12 @@
+ 
+ #ifdef __QNX__
+ 
+-#include <sys/socket.h>
+ #include <sys/types.h>
+-
++#include <sys/socket.h>
+ #include <fcntl.h>
++
++// QNX7 is missing accept4()
++#if (__QNX__ < 800)
+ #include <cerrno>
+ #include <fcntl.h>
+ #include <pthread.h>
+@@ -114,6 +116,7 @@ static int __accept(int s, struct sockaddr* addr, socklen_t* addrlen, accept_msg
+ int accept4(int s, struct sockaddr* addr, socklen_t* addrlen, int flags) {
+     return __accept(s, addr, addrlen, ACCEPT4, flags);
+ }
++#endif  // QNX8 has standard POSIX support (accept4, etc)
+ 
+ /*
+  * These definitions MUST remain in the global namespace.
+diff --git a/implementation/routing/src/routing_manager_impl.cpp b/implementation/routing/src/routing_manager_impl.cpp
+--- a/implementation/routing/src/routing_manager_impl.cpp
++++ b/implementation/routing/src/routing_manager_impl.cpp
+@@ -3453,6 +3453,10 @@ void routing_manager_impl::on_net_interface_or_route_state_changed(bool _is_inte
+ void routing_manager_impl::start_ip_routing() {
+ #if defined(_WIN32) || defined(__QNX__)
+     if_state_running_ = true;
++    sd_route_set_ = true;
++    // QNX: Process any pending service offers now that routing is ready
++    // (On Linux, this is done via on_net_interface_or_route_state_changed)
++    init_pending_services();
+ #endif
+ 
+     if (routing_ready_handler_) {
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 770ef56b..3df22b9c 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -416,7 +416,7 @@ set(EXAMPLE_CONFIG_FILES
+ # Configuration parameters
+ ################################################################################
+ if(${CMAKE_SYSTEM_NAME} MATCHES "QNX")
+-    set (VSOMEIP_BASE_PATH "/var")
++    set (VSOMEIP_BASE_PATH "/var/run")
+ else()
+     set (VSOMEIP_BASE_PATH "/tmp")
+ endif()
+diff --git a/implementation/utility/src/utility.cpp b/implementation/utility/src/utility.cpp
+index ef7a2889..6c340ecb 100644
+--- a/implementation/utility/src/utility.cpp
++++ b/implementation/utility/src/utility.cpp
+@@ -172,6 +172,11 @@ bool utility::is_routing_manager(const std::string& _network) {
+         VSOMEIP_ERROR << __func__ << ": Could not open " << its_lockfile << ": errno " << errno;
+     }
+ 
+-    return (its_lock_ctrl != -1);
++    // TODO Many functions are stubbed on the QNX image.
++    //      Will have to eventually figure out what needs to be done to get file locking working.
++    //      This fails: fcntl(r.first->second.lock_fd_, F_SETLK, &its_lock_data)
++    VSOMEIP_WARNING << __func__ << ": Lock file \"" << its_lockfile << "\" " << ((its_lock_ctrl != -1) ? "is locked" : "locking failed")
++                    << ". error: " << errno << " (" << strerror(errno) << ")";
++    return true;
+ #endif
+ }

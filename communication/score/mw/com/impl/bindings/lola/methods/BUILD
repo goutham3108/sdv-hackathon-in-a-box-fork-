@@ -1,0 +1,238 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//quality/unit_testing:unit_testing.bzl", "cc_unit_test")
+load("//score/mw:common_features.bzl", "COMPILER_WARNING_FEATURES")
+
+cc_library(
+    name = "proxy_method_instance_identifier",
+    srcs = ["proxy_method_instance_identifier.cpp"],
+    hdrs = ["proxy_method_instance_identifier.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl/bindings/lola:__pkg__",
+        "//score/mw/com/impl/bindings/lola/messaging:__pkg__",
+    ],
+    deps = [
+        ":unique_method_identifier",
+        "//score/mw/com/impl/bindings/lola:proxy_instance_identifier",
+        "@score_baselibs//score/mw/log",
+    ],
+)
+
+cc_library(
+    name = "method_data",
+    srcs = [
+        "method_data.cpp",
+    ],
+    hdrs = [
+        "method_data.h",
+    ],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola:__pkg__"],
+    deps = [
+        ":type_erased_call_queue",
+        ":unique_method_identifier",
+        "//score/memory/shared:managed_memory_resource",
+        "//score/memory/shared:polymorphic_offset_ptr_allocator",
+        "//score/mw/com/impl/configuration",
+        "@score_baselibs//score/containers:non_relocatable_vector",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "method_resource_map",
+    srcs = [
+        "method_resource_map.cpp",
+    ],
+    hdrs = [
+        "method_resource_map.h",
+    ],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/mw/log",
+    ],
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola:__pkg__"],
+    deps = [
+        "//score/memory/shared",
+        "//score/mw/com/impl/bindings/lola:proxy_instance_identifier",
+        "//score/mw/com/impl/configuration",
+    ],
+)
+
+cc_library(
+    name = "type_erased_call_queue",
+    srcs = [
+        "type_erased_call_queue.cpp",
+    ],
+    hdrs = [
+        "type_erased_call_queue.h",
+    ],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = [
+        "//score/memory/shared:pointer_arithmetic_util",
+    ],
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola:__pkg__"],
+    deps = [
+        "//score/memory/shared:memory_resource_proxy",
+        "//score/memory/shared:offset_ptr",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/memory:data_type_size_info",
+    ],
+)
+
+cc_library(
+    name = "method_error",
+    srcs = ["method_error.cpp"],
+    hdrs = ["method_error.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = [
+        "//score/mw/com/impl:__subpackages__",
+    ],
+    deps = [
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/result",
+    ],
+)
+
+cc_library(
+    name = "offered_state_machine",
+    srcs = ["offered_state_machine.cpp"],
+    hdrs = ["offered_state_machine.h"],
+    features = COMPILER_WARNING_FEATURES,
+    implementation_deps = ["@score_baselibs//score/language/futurecpp"],
+    tags = ["FFI"],
+    visibility = ["//score/mw/com/impl/bindings/lola:__pkg__"],
+)
+
+cc_library(
+    name = "unique_method_identifier",
+    srcs = ["unique_method_identifier.cpp"],
+    hdrs = ["unique_method_identifier.h"],
+    features = COMPILER_WARNING_FEATURES,
+    tags = ["FFI"],
+    visibility = ["//score/mw/com:__subpackages__"],
+    deps = [
+        "//score/mw/com/impl:method_type",
+        "//score/mw/com/impl/configuration:lola_field_id",
+        "//score/mw/com/impl/configuration:lola_method_id",
+        "//score/mw/com/impl/configuration:lola_service_element_id",
+        "@score_baselibs//score/language/safecpp/safe_math",
+        "@score_baselibs//score/mw/log",
+    ],
+)
+
+cc_unit_test(
+    name = "unique_method_identifier_test",
+    srcs = ["unique_method_identifier_test.cpp"],
+    deps = [
+        ":unique_method_identifier",
+        "@score_baselibs//score/mw/log",
+        "@score_baselibs//score/mw/log:recorder_mock",
+    ],
+)
+
+cc_unit_test(
+    name = "type_erased_call_queue_test",
+    srcs = [
+        "type_erased_call_queue_test.cpp",
+    ],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":type_erased_call_queue",
+        "//score/memory/shared:memory_resource_proxy",
+        "//score/memory/shared:pointer_arithmetic_util",
+        "//score/memory/shared/fake:fake_memory_resources",
+        "@googletest//:gtest",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+        "@score_baselibs//score/memory:data_type_size_info",
+        "@score_baselibs//score/mw/log",
+    ],
+)
+
+cc_unit_test(
+    name = "proxy_method_instance_identifier_test",
+    srcs = ["proxy_method_instance_identifier_test.cpp"],
+    deps = [
+        ":proxy_method_instance_identifier",
+        "@score_baselibs//score/mw/log",
+        "@score_baselibs//score/mw/log:recorder_mock",
+    ],
+)
+
+cc_unit_test(
+    name = "method_data_test",
+    srcs = [
+        "method_data_test.cpp",
+    ],
+    deps = [
+        ":method_data",
+        "//score/memory/shared/fake:fake_memory_resources",
+    ],
+)
+
+cc_unit_test(
+    name = "method_error_test",
+    srcs = [
+        "method_error_test.cpp",
+    ],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":method_error",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)
+
+cc_unit_test(
+    name = "method_resource_map_test",
+    srcs = [
+        "method_resource_map_test.cpp",
+    ],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":method_resource_map",
+        "//score/memory/shared:shared_memory_resource_mock",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)
+
+cc_unit_test(
+    name = "offered_state_machine_test",
+    srcs = ["offered_state_machine_test.cpp"],
+    features = COMPILER_WARNING_FEATURES + [
+        # These tests catch exceptions instead of using gtest EXPECT_DEATH so we disable aborts_upon_exception.
+        "-aborts_upon_exception",
+    ],
+    deps = [
+        ":offered_state_machine",
+        "@googletest//:gtest",
+        "@score_baselibs//score/language/futurecpp:futurecpp_test_support",
+    ],
+)

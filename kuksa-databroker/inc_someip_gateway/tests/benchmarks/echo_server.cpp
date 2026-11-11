@@ -1,0 +1,273 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+
+#include <chrono>
+#include <csignal>
+#include <iostream>
+#include <optional>
+#include <string>
+#include <thread>
+
+#include "echo_service.h"
+#include "score/mw/com/runtime.h"
+#include "score/stop_token.hpp"
+
+using namespace echo_service;
+using score::mw::com::impl::SamplePtr;
+
+static std::size_t total_processed{0};
+
+using namespace std::chrono_literals;
+
+constexpr std::uint16_t MaxSamplesCount{10};
+constexpr std::size_t LOAD_BALANCING_INTERVAL{1000};
+constexpr auto LOAD_BALANCING_DELAY{1ms};
+constexpr auto MAIN_LOOP_SLEEP{10us};
+constexpr auto INITIAL_CLIENT_WAIT{2s};
+constexpr auto STATS_INTERVAL{5s};
+
+constexpr const char* EchoRequestInstanceSpecifier = "benchmark/echo_request";
+constexpr const char* EchoResponseInstanceSpecifier = "benchmark/echo_response";
+
+namespace {
+score::cpp::stop_source g_stop_source{score::cpp::nostopstate_t{}};
+score::cpp::stop_token g_stop_token{g_stop_source.get_token()};
+
+void SigTermHandlerFunction(int /*signal*/) { g_stop_source.request_stop(); }
+
+std::optional<EchoRequestPreSerializedProxy> TryConnectToClient() {
+    auto handles = EchoRequestPreSerializedProxy::FindService(
+        score::mw::com::InstanceSpecifier::Create(std::string{EchoRequestInstanceSpecifier})
+            .value());
+
+    if (!handles.has_value() || handles.value().empty()) {
+        return std::nullopt;
+    }
+
+    auto proxy_result = EchoRequestPreSerializedProxy::Create(handles.value().front());
+    if (!proxy_result.has_value()) {
+        return std::nullopt;
+    }
+
+    return std::move(proxy_result).value();
+}
+
+template <PayloadSize payload_size, typename ResponseEvent>
+void ProcessSingleEchoRequest(SamplePtr<EchoMessagePreSerialized<payload_size>> request_sample,
+                              ResponseEvent& response_event, std::size_t& requests_processed,
+                              const char* payload_name) {
+    if (g_stop_token.stop_requested()) {
+        return;
+    }
+
+    auto response_result = response_event.Allocate();
+    if (!response_result.has_value()) {
+        std::cerr << "Failed to allocate " << payload_name << " response for sequence_id: "
+                  << utils::GetSequenceId<payload_size>(*request_sample) << std::endl;
+        return;
+    }
+
+    auto response = std::move(response_result).value();
+    utils::CopyMessageForEcho<payload_size>(*response, *request_sample);
+
+    auto send_result = response_event.Send(std::move(response));
+    if (!send_result.has_value()) {
+        std::cerr << "Failed to send " << payload_name << " response for sequence_id: "
+                  << utils::GetSequenceId<payload_size>(*request_sample) << std::endl;
+        return;
+    }
+
+    ++requests_processed;
+    ++total_processed;
+
+    if (total_processed % LOAD_BALANCING_INTERVAL == 0) {
+        std::this_thread::sleep_for(LOAD_BALANCING_DELAY);
+    }
+}
+
+void ProcessEchoRequests(EchoRequestPreSerializedProxy& request_proxy,
+                         EchoResponsePreSerializedSkeleton& response_skeleton,
+                         std::size_t& requests_processed_tiny,
+                         std::size_t& requests_processed_small,
+                         std::size_t& requests_processed_medium,
+                         std::size_t& requests_processed_large,
+                         std::size_t& requests_processed_xlarge,
+                         std::size_t& requests_processed_xxlarge) {
+    if (g_stop_token.stop_requested()) {
+        return;
+    }
+
+    (void)request_proxy.echo_request_tiny_.GetNewSamples(
+        [&](auto request_sample) {
+            ProcessSingleEchoRequest<PayloadSize::Tiny>(std::move(request_sample),
+                                                        response_skeleton.echo_response_tiny_,
+                                                        requests_processed_tiny, "tiny");
+        },
+        MaxSamplesCount);
+
+    (void)request_proxy.echo_request_small_.GetNewSamples(
+        [&](auto request_sample) {
+            ProcessSingleEchoRequest<PayloadSize::Small>(std::move(request_sample),
+                                                         response_skeleton.echo_response_small_,
+                                                         requests_processed_small, "small");
+        },
+        MaxSamplesCount);
+
+    (void)request_proxy.echo_request_medium_.GetNewSamples(
+        [&](auto request_sample) {
+            ProcessSingleEchoRequest<PayloadSize::Medium>(std::move(request_sample),
+                                                          response_skeleton.echo_response_medium_,
+                                                          requests_processed_medium, "medium");
+        },
+        MaxSamplesCount);
+
+    (void)request_proxy.echo_request_large_.GetNewSamples(
+        [&](auto request_sample) {
+            ProcessSingleEchoRequest<PayloadSize::Large>(std::move(request_sample),
+                                                         response_skeleton.echo_response_large_,
+                                                         requests_processed_large, "large");
+        },
+        MaxSamplesCount);
+
+    (void)request_proxy.echo_request_xlarge_.GetNewSamples(
+        [&](auto request_sample) {
+            ProcessSingleEchoRequest<PayloadSize::XLarge>(std::move(request_sample),
+                                                          response_skeleton.echo_response_xlarge_,
+                                                          requests_processed_xlarge, "xlarge");
+        },
+        MaxSamplesCount);
+
+    (void)request_proxy.echo_request_xxlarge_.GetNewSamples(
+        [&](auto request_sample) {
+            ProcessSingleEchoRequest<PayloadSize::XXLarge>(std::move(request_sample),
+                                                           response_skeleton.echo_response_xxlarge_,
+                                                           requests_processed_xxlarge, "xxlarge");
+        },
+        MaxSamplesCount);
+}
+}  // namespace
+
+int main(int const argc, const char* const argv[]) {
+    std::signal(SIGINT, SigTermHandlerFunction);
+    std::signal(SIGTERM, SigTermHandlerFunction);
+
+    g_stop_source = score::cpp::stop_source{};
+    g_stop_token = g_stop_source.get_token();
+
+    std::cout << "Starting Echo Server..." << std::endl;
+
+    score::mw::com::runtime::InitializeRuntime(echo_service::utils::create_command_line_arguments(
+        score::cpp::span<char const* const>{argv, static_cast<std::size_t>(argc)}));
+
+    auto response_skeleton_result = EchoResponsePreSerializedSkeleton::Create(
+        score::mw::com::InstanceSpecifier::Create(std::string{EchoResponseInstanceSpecifier})
+            .value());
+
+    if (!response_skeleton_result.has_value()) {
+        std::cerr << "Failed to create response skeleton" << std::endl;
+        return 1;
+    }
+    auto response_skeleton = std::move(response_skeleton_result).value();
+
+    auto offer_result = response_skeleton.OfferService();
+    if (!offer_result.has_value()) {
+        std::cerr << "Failed to offer response service" << std::endl;
+        return 1;
+    }
+
+    std::cout << "Echo Server ready - listening for requests..." << std::endl;
+
+    std::size_t requests_processed_tiny{0};
+    std::size_t requests_processed_small{0};
+    std::size_t requests_processed_medium{0};
+    std::size_t requests_processed_large{0};
+    std::size_t requests_processed_xlarge{0};
+    std::size_t requests_processed_xxlarge{0};
+
+    std::optional<EchoRequestPreSerializedProxy> request_proxy;
+
+    // Give some time for the benchmark client to start and subscribe
+    std::this_thread::sleep_for(INITIAL_CLIENT_WAIT);
+
+    // Waiting for client
+    std::cout << "Waiting for benchmark clients to connect..." << std::endl;
+    while (!g_stop_token.stop_requested() && !request_proxy.has_value()) {
+        auto connection_result = TryConnectToClient();
+        if (connection_result.has_value()) {
+            request_proxy = std::move(connection_result).value();
+            std::cout << "Benchmark client connected" << std::endl;
+        }
+
+        // Sleep briefly to avoid busy waiting
+        std::this_thread::sleep_for(MAIN_LOOP_SLEEP);
+    }
+
+    if (g_stop_token.stop_requested()) {
+        std::cout << "Stop requested before setting up handlers. Exiting..." << std::endl;
+        return 0;
+    }
+
+    SCORE_LANGUAGE_FUTURECPP_ASSERT(request_proxy.has_value());
+
+    // Setting up handlers
+    std::cout << "Connected to benchmark clients, setting up handlers..." << std::endl;
+    (void)request_proxy->echo_request_tiny_.Subscribe(MaxSamplesCount);
+    (void)request_proxy->echo_request_small_.Subscribe(MaxSamplesCount);
+    (void)request_proxy->echo_request_medium_.Subscribe(MaxSamplesCount);
+    (void)request_proxy->echo_request_large_.Subscribe(MaxSamplesCount);
+    (void)request_proxy->echo_request_xlarge_.Subscribe(MaxSamplesCount);
+    (void)request_proxy->echo_request_xxlarge_.Subscribe(MaxSamplesCount);
+
+    std::cout << "All request handlers setup complete" << std::endl;
+
+    auto last_stats_time = std::chrono::steady_clock::now();
+    while (!g_stop_token.stop_requested()) {
+        ProcessEchoRequests(*request_proxy, response_skeleton, requests_processed_tiny,
+                            requests_processed_small, requests_processed_medium,
+                            requests_processed_large, requests_processed_xlarge,
+                            requests_processed_xxlarge);
+
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_stats_time >= STATS_INTERVAL) {
+            std::cout << "Processed requests - Tiny: " << requests_processed_tiny
+                      << ", Small: " << requests_processed_small
+                      << ", Medium: " << requests_processed_medium
+                      << ", Large: " << requests_processed_large
+                      << ", XLarge: " << requests_processed_xlarge
+                      << ", XXLarge: " << requests_processed_xxlarge << std::endl;
+            last_stats_time = now;
+        }
+
+        // Sleep briefly to avoid busy waiting
+        std::this_thread::sleep_for(MAIN_LOOP_SLEEP);
+    }
+
+    request_proxy->echo_request_tiny_.Unsubscribe();
+    request_proxy->echo_request_small_.Unsubscribe();
+    request_proxy->echo_request_medium_.Unsubscribe();
+    request_proxy->echo_request_large_.Unsubscribe();
+    request_proxy->echo_request_xlarge_.Unsubscribe();
+    request_proxy->echo_request_xxlarge_.Unsubscribe();
+
+    auto total_requests = requests_processed_tiny + requests_processed_small +
+                          requests_processed_medium + requests_processed_large +
+                          requests_processed_xlarge + requests_processed_xxlarge;
+    std::cout << "Echo Server shutdown complete. Total requests processed: " << total_requests
+              << " (Tiny: " << requests_processed_tiny << ", Small: " << requests_processed_small
+              << ", Medium: " << requests_processed_medium
+              << ", Large: " << requests_processed_large
+              << ", XLarge: " << requests_processed_xlarge
+              << ", XXLarge: " << requests_processed_xxlarge << ")" << std::endl;
+
+    return 0;
+}

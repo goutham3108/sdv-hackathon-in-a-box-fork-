@@ -1,0 +1,97 @@
+/********************************************************************************
+ * Copyright (c) 2026 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+
+{% import "macros" as macros -%}
+
+use score_com::{CommData, Reloc};
+use std::default::Default;
+
+{% macro render_namespace(ns) -%}
+pub mod {{ ns.name }} {
+    use super::*;
+{% set event_datatypes = ns.interfaces | default([]) | map(attribute="events") | sum(start=[]) | map(attribute="datatype") | list %}
+{% for datatype, rust_type, sample_name in [("boolean", "bool", "BoolSample"), ("uint8", "u8", "U8Sample"), ("float", "f32", "F32Sample")] if datatype in event_datatypes %}
+    #[repr(C)]
+    #[derive(Debug, Clone, PartialEq, Default, Reloc, CommData)]
+    #[comm_data(id = "{{ sample_name }}")]
+    pub struct {{ sample_name }} {
+        pub value: {{ rust_type }},
+    }
+
+    impl From<{{ rust_type }}> for {{ sample_name }} {
+        fn from(value: {{ rust_type }}) -> Self {
+            Self { value }
+        }
+    }
+{% endfor %}
+{% if "string" in event_datatypes %}
+    #[repr(C)]
+    #[derive(Debug, Clone, PartialEq, Default, Reloc, CommData)]
+    #[comm_data(id = "String16Sample")]
+    pub struct String16Sample {
+        pub value: [u8; 16],
+    }
+
+    impl From<[u8; 16]> for String16Sample {
+        fn from(value: [u8; 16]) -> Self {
+            Self { value }
+        }
+    }
+{% endif %}
+{% for en in ns.enumerations | default([]) %}
+    #[repr({{ macros.to_rust_type(en.datatype) }})]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub enum {{ en.name }} {
+{% for lit in en.literals | default([]) %}
+        {% if loop.index0 == 0 %}#[default]{% endif %}
+        {{ lit.name }} = {{ lit.value }},
+{% endfor %}
+    }
+{% endfor %}
+{% for str in ns.structs | default([]) %}
+    #[repr(C)]
+    #[derive(Debug, Clone, PartialEq, Default, Reloc, CommData)]
+    #[comm_data(id = "{{ str.name }}")]
+    pub struct {{ str.name }} {
+{% for member in str.members | default([]) %}
+        pub {{ member.name }}: {% if member.arraysize is defined %}[{{ macros.to_rust_type(member.datatype) }}; {{ member.arraysize }}]{% else %}{{ macros.to_rust_type(member.datatype) }}{% endif %},
+{% endfor %}
+    }
+{% endfor %}
+{% for child in ns.namespaces | default([]) %}
+{{ render_namespace(child) }}
+{% endfor %}
+{% if "boolean" in event_datatypes and "uint8" in event_datatypes and "float" in event_datatypes and "string" in event_datatypes %}
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use std::mem::{align_of, size_of};
+
+        #[test]
+        fn primitive_samples_match_bcm_layouts() {
+            assert_eq!((size_of::<BoolSample>(), align_of::<BoolSample>()), (1, 1));
+            assert_eq!((size_of::<U8Sample>(), align_of::<U8Sample>()), (1, 1));
+            assert_eq!((size_of::<F32Sample>(), align_of::<F32Sample>()), (4, 4));
+            assert_eq!((size_of::<String16Sample>(), align_of::<String16Sample>()), (16, 1));
+            assert!(BoolSample::from(true).value);
+            assert_eq!(U8Sample::from(100).value, 100);
+            assert_eq!(F32Sample::from(12.5).value, 12.5);
+            assert_eq!(String16Sample::from(*b"0123456789ABCDEF").value, *b"0123456789ABCDEF");
+        }
+    }
+{% endif %}
+}
+{% endmacro %}
+{% for ns in json.namespaces | default([]) %}
+{{ render_namespace(ns) }}
+{% endfor %}

@@ -1,0 +1,116 @@
+/********************************************************************************
+ * Copyright (c) 2026 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/test/move_semantics/skeleton_event/consumer.h"
+
+#include "score/mw/com/test/common_test_resources/fail_test.h"
+#include "score/mw/com/test/common_test_resources/process_synchronizer.h"
+#include "score/mw/com/test/common_test_resources/proxy_container.h"
+#include "score/mw/com/test/common_test_resources/proxy_event_receiver.h"
+#include "score/mw/com/test/common_test_resources/proxy_event_state_change_notifier.h"
+#include "score/mw/com/test/move_semantics/skeleton_event/test_event_datatype.h"
+#include "score/mw/com/types.h"
+
+#include <cstdint>
+#include <optional>
+
+namespace score::mw::com::test
+{
+namespace
+{
+
+const std::string kInterprocessNotificationShmPath{"/skeleton_event_move_semantics_interprocess_notification"};
+
+}  // namespace
+
+void RunConsumer(const InstanceSpecifier& instance_specifier,
+                 const std::size_t num_samples_to_receive,
+                 const std::size_t num_send_iterations,
+                 const score::cpp::stop_token& stop_token)
+{
+    const auto name = filesystem::Path{instance_specifier.ToString()}.Filename().Native();
+    auto process_synchronizer_result =
+        ProcessSynchronizer::Create(kInterprocessNotificationShmPath + std::string{name});
+    if (!process_synchronizer_result.has_value())
+    {
+        FailTest("skeleton_event_move_semantics consumer failed: could not create ready synchronizer");
+    }
+
+    ExitFunctionGuard done_guard{[&process_synchronizer_result]() {
+        process_synchronizer_result->Notify();
+    }};
+
+    ProxyContainer<SkeletonMoveSemanticsProxy> proxy_container{};
+
+    // Step 1. Find service and create proxy
+    std::cout << "\nConsumer: Step 1 - Find service and create proxy" << std::endl;
+    proxy_container.CreateProxy(instance_specifier, "skeleton_event_move_semantics");
+    auto& proxy = proxy_container.GetProxy();
+
+    // Step 2. Register receive handler
+    std::cout << "\nConsumer: Step 2 - Register receive handler" << std::endl;
+    ProxyEventReceiver proxy_event_receiver{proxy.moved_event_};
+
+    // Step 3. Register state change handler
+    std::cout << "\nConsumer: Step 3 - Register state change handler" << std::endl;
+    ProxyEventStateChangeNotifier proxy_event_state_change_notifier{proxy.moved_event_};
+
+    // Step 4. Subscribe
+    std::cout << "\nConsumer: Step 4 - Subscribe" << std::endl;
+    auto subscribe_result = proxy.moved_event_.Subscribe(num_samples_to_receive);
+    if (!subscribe_result.has_value())
+    {
+        FailTest("skeleton_event_move_semantics consumer failed: Subscribe failed: ", subscribe_result.error());
+    }
+
+    // Step 5. Wait for provider to send values and notify
+    std::cout << "\nConsumer: Step 5 - Wait for provider to send values and notify" << std::endl;
+    std::optional<std::uint32_t> latest_value{0U};
+    auto get_new_samples_callback = [&latest_value](SamplePtr<std::uint32_t> sample) {
+        if (sample == nullptr)
+        {
+            FailTest("skeleton_event_move_semantics consumer failed: received null sample");
+        }
+        const std::uint32_t expected_value = latest_value.has_value() ? latest_value.value() + 1U : 1U;
+        if (*sample != expected_value)
+        {
+            FailTest("skeleton_event_move_semantics consumer failed: received value ",
+                     *sample,
+                     " does not match expected value ",
+                     expected_value);
+        }
+        latest_value = *sample;
+    };
+    for (std::size_t iteration = 0U; iteration < num_send_iterations; ++iteration)
+    {
+        std::cout << "\nConsumer: Iteration " << (iteration + 1) << " of " << num_send_iterations << std::endl;
+        const auto wait_for_state_change_result =
+            proxy_event_state_change_notifier.WaitForStateChange(stop_token, SubscriptionState::kSubscribed);
+        if (!wait_for_state_change_result)
+        {
+            FailTest("skeleton_event_move_semantics consumer failed: WaitForStateChange was interrupted by stop_token");
+        }
+
+        const auto wait_for_samples_result =
+            proxy_event_receiver.WaitForSamples(stop_token, num_samples_to_receive, get_new_samples_callback);
+        if (!wait_for_samples_result)
+        {
+            FailTest("skeleton_event_move_semantics consumer failed: WaitForSamples was interrupted by stop_token");
+        }
+
+        std::cout << "\nConsumer: Done receiving samples, received " << num_samples_to_receive << " samples in total\n";
+        process_synchronizer_result->Notify();
+    }
+    std::cout << "Consumer: Done with all iterations, exiting" << std::endl;
+}
+
+}  // namespace score::mw::com::test

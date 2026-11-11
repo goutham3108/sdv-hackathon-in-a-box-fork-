@@ -1,0 +1,144 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+/**
+ * Header file for artifacts, which AUTOSAR SWS Communication Management
+ * places into namespace score::mw::com::runtime.
+ *
+ * Right now, AUTOSAR misses to specify the corresponding header.
+ * We raised a ticket @see https://jira.autosar.org/browse/AR-106018
+ */
+#ifndef SCORE_MW_COM_RUNTIME_H
+#define SCORE_MW_COM_RUNTIME_H
+
+#include "score/language/safecpp/string_view/zstring_view.h"
+#include "score/mw/com/mocking/i_runtime.h"
+#include "score/mw/com/runtime_configuration.h"
+#include "score/mw/com/types.h"
+#include "score/result/result.h"
+#include "score/span.hpp"
+
+#include <cstdint>
+
+namespace score::mw::com::runtime
+{
+namespace detail
+{
+
+/// @brief Holder class which stores a pointer to a IRuntime which is used to mock the implementation of the
+/// free-functions in this file.
+///
+/// The getter is public as it will be accessed by the free-functions in this file. The setter is private and can only
+/// be accessed via the test-only InjectRuntimeMock function in mw/com/test_type_utilities.cpp.
+class RuntimeMockHolder
+{
+    friend void InjectRuntimeMock(IRuntime&);
+
+  public:
+    static IRuntime* GetRuntimeMock()
+    {
+        return runtime_mock_;
+    }
+
+  private:
+    static void InjectRuntimeMockImpl(IRuntime& runtime_mock)
+    {
+        runtime_mock_ = &runtime_mock;
+    }
+
+    static IRuntime* runtime_mock_;
+};
+
+}  // namespace detail
+
+/**
+ * \api
+ * \brief Resolves given InstanceSpecifier (port name in the model) to a collection of InstanceIdentifiers via
+ * manifest lookup.
+ *
+ * \param modelName (name of the SWC port)
+ * \return container with InstanceIdentifiers
+ * \requirement SWS_CM_00118
+ */
+score::Result<score::mw::com::InstanceIdentifierContainer> ResolveInstanceIDs(const InstanceSpecifier& model_name);
+
+/**
+ * \api
+ * \brief Initializes mw::com subsystem with the given configuration referenced in the command-line options.
+ * \details This call is optional for a mw::com user. Only if the mw::com configuration (json) is not located in the
+ *         default manifest path, this function shall be called with the commandline option
+ *         "--service_instance_manifest" pointing to the json config file to be used.
+ * \attention This function shall only be called ONCE per application/process lifetime! A second call may have no
+ *            effect after an internal runtime singleton has been already created/is in use!
+ *            The arguments contained in argv are expected to be NULL-terminated.
+ *
+ * \param argc number of arguments in the upcoming argv array
+ * \param argv array of NULL-terminated c-style strings as handed over to applications main() entry-point.
+ *
+ * \deprecated Use InitializeRuntime(cpp::span<safecpp::zstring_view> command_line_arguments) for guaranteed NULL
+ * terminated arguments
+ */
+[[deprecated(
+    "Please use InitializeRuntime(cpp::span<safecpp::zstring_view> command_line_arguments) for guaranteed NULL "
+    "terminated arguments")]]
+// NOLINTNEXTLINE(modernize-avoid-c-arrays):C-style array tolerated for command line arguments
+void InitializeRuntime(const std::int32_t argc, const char* argv[]);
+
+/**
+ * \api
+ * \brief Initializes mw::com subsystem with the given configuration referenced in the command-line options.
+ * \details This call is optional for a mw::com user. Only if the mw::com configuration (json) is not located in the
+ *         default manifest path, this function shall be called with the commandline option
+ *         "--service_instance_manifest" pointing to the json config file to be used.
+ * \attention This function shall only be called ONCE per application/process lifetime! A second call may have no
+ *            effect after an internal runtime singleton has been already created/is in use!
+ *            Users should hand over the arguments received from const char* argv[] argument of main(). Since there the
+ *            OS assures, that each element in argv is a NULL-terminated string, user can build up each
+ *            safecpp::zstring_view in command_line_arguments by creating it from std::string_view(argv[i])
+ * @param command_line_arguments
+ */
+void InitializeRuntime(const cpp::span<safecpp::zstring_view> command_line_arguments);
+
+/**
+ * \api
+ * \brief Initializes mw::com subsystem with the given configuration.
+ * \details This call is optional for a mw::com user. Only if the mw::com configuration (json) is not located in the
+ *         default manifest path, this function shall be called when the caller already has the configuration path.
+ * \attention This function shall only be called ONCE per application/process lifetime! A second call may have no
+ *            effect after an internal runtime singleton has been already created/is in use!
+ */
+void InitializeRuntime(const RuntimeConfiguration& runtime_configuration);
+
+/**
+ * \api
+ * \brief Extends mw::com subsystem with the given add-on configuration.
+ * \details This call is optional and shall allow loading additional mw::com configuration files in order to extend
+ * already loaded configurations.
+ * \attention This function will call std::terminate() in case that the configuration is incompatible to the previously
+ * loaded one or if no complete mw::com configuration has been loaded previously.
+ **/
+Result<void> AddConfiguration(const RuntimeConfiguration& runtime_configuration);
+
+/**
+ * \api
+ * \brief Extends mw::com subsystem with the given add-on configuration provided as a JSON blob.
+ * \details This call is optional and shall allow loading additional mw::com configuration as an in-memory JSON
+ *          object in order to extend already loaded configurations.
+ * \attention This function will call std::terminate() in case that the configuration is incompatible to the previously
+ * loaded one or if no complete mw::com configuration has been loaded previously.
+ * \param json The JSON object containing the add-on configuration.
+ **/
+Result<void> AddConfiguration(score::json::Any json);
+
+}  // namespace score::mw::com::runtime
+
+#endif  // SCORE_MW_COM_RUNTIME_H

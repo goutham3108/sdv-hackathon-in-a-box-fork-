@@ -1,0 +1,203 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Use `bazel mod deps --lockfile_mode=update` to update the lock file
+common --lockfile_mode=error
+
+# In order to overcome stability issues in GitHub
+common --experimental_repository_downloader_retries=10
+common --experimental_scale_timeouts=2.0
+common --http_connector_attempts=10
+common --http_connector_retry_max_timeout=1s
+common --http_timeout_scaling=2.0
+
+# Do not use automatically C++ generated toolchains
+build --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
+
+# rules_python defaults py_binary/py_test bootstrapping to "system_python", which generates a `#!/usr/bin/env python3`
+# shebang and relies on a python3 interpreter already being present on PATH. This is non-hermetic.
+# Use the hermetic "script" bootstrap, which resolves the interpreter from a registered rules_python toolchain instead.
+build --@rules_python//python/config_settings:bootstrap_impl=script
+
+common --@score_baselibs//score/json:base_library=nlohmann
+common --//score/memory/shared/flags:use_typedshmd=False
+common --@score_baselibs//score/analysis/tracing/generic_trace_library:implementation=@score_baselibs//score/analysis/tracing/generic_trace_library/stub_implementation
+
+# Config required by https://github.com/eclipse-score/communication/blob/main/CI.md#supported-configurations
+common:linux_x64_gcc_15 --extra_toolchains=@gcc_toolchain_x86_64//:cc_toolchain
+common:linux_x64_gcc_15 --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_x86_64_unknown_linux_gnu
+# Config required by https://github.com/eclipse-score/communication/blob/main/CI.md#supported-configurations
+common:linux_x64 --config=linux_x64_gcc_15
+# Default required by https://github.com/eclipse-score/communication/blob/main/CI.md#supported-configurations
+common --config=linux_x64_gcc_15
+
+common --extra_toolchains=//bazel/toolchains:score_communication_libclang_toolchain
+
+build --incompatible_strict_action_env
+test --test_output=errors
+build --experimental_retain_test_configuration_across_testonly #https://github.com/bazelbuild/bazel/issues/6842
+
+# Do not show warnings from external libraries
+build --output_filter=^(?!(external/.*(googletest|flatbuffers|score_baselibs|google_benchmark|json_schema_validator)|@@?[^/]*(googletest|flatbuffers|score_baselibs|google_benchmark|json_schema_validator)|[/]*quality/compiler_warnings)).*
+
+# Do not treat as errors the warnings from external libraries that are known
+# boost
+build --per_file_copt=external/.*boost.*@-Wno-error=sign-conversion
+build --host_per_file_copt=external/.*boost.*@-Wno-error=sign-conversion
+build --per_file_copt=external/.*boost.*@-Wno-error=shadow
+build --host_per_file_copt=external/.*boost.*@-Wno-error=shadow
+
+# flatbuffers
+build --per_file_copt=external/.*flatbuffers.*@-Wno-error=sign-conversion
+build --host_per_file_copt=external/.*flatbuffers.*@-Wno-error=sign-conversion
+build --per_file_copt=external/.*flatbuffers.*@-Wno-error=switch-enum
+build --host_per_file_copt=external/.*flatbuffers.*@-Wno-error=switch-enum
+build --per_file_copt=external/.*flatbuffers.*@-Wno-error=conversion
+build --host_per_file_copt=external/.*flatbuffers.*@-Wno-error=conversion
+
+# googletest
+build --per_file_copt=external/.*googletest.*@-Wno-error=switch-enum
+build --host_per_file_copt=external/.*googletest.*@-Wno-error=switch-enum
+build --per_file_copt=external/.*googletest.*@-Wno-error=missing-field-initializers
+build --host_per_file_copt=external/.*googletest.*@-Wno-error=missing-field-initializers
+
+# google_benchmark
+build --per_file_copt=external/.*google_benchmark.*@-Wno-error=sign-conversion
+build --host_per_file_copt=external/.*google_benchmark.*@-Wno-error=sign-conversion
+build --per_file_copt=external/.*google_benchmark.*@-Wno-error=switch-enum
+build --host_per_file_copt=external/.*google_benchmark.*@-Wno-error=switch-enum
+build --per_file_copt=external/.*google_benchmark.*@-Wno-error=undef
+build --host_per_file_copt=external/.*google_benchmark.*@-Wno-error=undef
+build --per_file_copt=external/.*google_benchmark.*@-Wno-error=suggest-attribute=format
+build --host_per_file_copt=external/.*google_benchmark.*@-Wno-error=suggest-attribute=format
+
+# json_schema_validator
+build --per_file_copt=external/.*json_schema_validator.*@-Wno-error=switch
+build --host_per_file_copt=external/.*json_schema_validator.*@-Wno-error=switch
+build --per_file_copt=external/.*json_schema_validator.*@-Wno-error=switch-enum
+build --host_per_file_copt=external/.*json_schema_validator.*@-Wno-error=switch-enum
+build --per_file_copt=external/.*json_schema_validator.*@-Wno-error=sign-conversion
+build --host_per_file_copt=external/.*json_schema_validator.*@-Wno-error=sign-conversion
+build --per_file_copt=external/.*json_schema_validator.*@-Wno-error=conversion
+build --host_per_file_copt=external/.*json_schema_validator.*@-Wno-error=conversion
+build --per_file_copt=external/.*json_schema_validator.*@-Wno-error=range-loop-construct
+build --host_per_file_copt=external/.*json_schema_validator.*@-Wno-error=range-loop-construct
+
+# score_baselibs
+# Issue reported in https://github.com/eclipse-score/baselibs/issues/631
+build --per_file_copt=external/.*score_baselibs.*string_manipulation.*arguments.*@-Wno-error=sign-conversion
+build --host_per_file_copt=external/.*score_baselibs.*string_manipulation.*arguments.*@-Wno-error=sign-conversion
+
+# score_qnx_unit_tests
+# Issue reported in https://github.com/eclipse-score/qnx_unit_tests/issues/44
+build --per_file_copt=external/.*score_qnx_unit_tests.*virtio9p.*@-Wno-error=sign-conversion
+build --host_per_file_copt=external/.*score_qnx_unit_tests.*virtio9p.*@-Wno-error=sign-conversion
+
+# Places with warnings that we need to fix
+# Issue to track it https://github.com/eclipse-score/communication/issues/1180
+build --per_file_copt=score/message_passing/qnx_dispatch_mocked_server.*@-Wno-error=sign-conversion
+build --host_per_file_copt=score/message_passing/qnx_dispatch_mocked_server.*@-Wno-error=sign-conversion
+build --per_file_copt=score/message_passing/qnx_dispatch_engine_test.*@-Wno-error=sign-conversion
+build --host_per_file_copt=score/message_passing/qnx_dispatch_engine_test.*@-Wno-error=sign-conversion
+build --per_file_copt=score/message_passing/dispatch_thread_runner_test.*@-Wno-error=sign-conversion
+build --host_per_file_copt=score/message_passing/dispatch_thread_runner_test.*@-Wno-error=sign-conversion
+
+# Enable the experimental FlatBuffers configuration path.
+build:flatbuffers --//score/mw/com/flags:experimental_enable_flatbuffers_configuration=True
+
+common:linux_x86_64_score_gcc_12_2_0_posix --platforms=@score_bazel_platforms//:x86_64-linux-gcc_12.2.0-posix
+common:linux_x86_64_score_gcc_12_2_0_posix --extra_toolchains=@score_gcc_x86_64_toolchain//:x86_64-linux
+# Config required by https://github.com/eclipse-score/communication/blob/main/CI.md#supported-configurations
+common:linux_x64_gcc_12 --config=linux_x86_64_score_gcc_12_2_0_posix
+
+common:linux_aarch64_score_gcc_12_2_0_posix --platforms=@score_bazel_platforms//:aarch64-linux-gcc_12.2.0-posix
+common:linux_aarch64_score_gcc_12_2_0_posix --extra_toolchains=@score_gcc_aarch64_toolchain//:aarch64-linux
+common:linux_aarch64_score_gcc_12_2_0_posix --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_aarch64_unknown_linux_gnu
+# Config required by https://github.com/eclipse-score/communication/blob/main/CI.md#supported-configurations
+common:linux_arm64_gcc_12 --config=linux_aarch64_score_gcc_12_2_0_posix
+
+# In order to build for QNX, you need:
+# * An account on qnx.com
+# * An assigned QNX 8 license to your account
+#   * If you are applicable for "Free for non commercial use" see here: https://www.qnx.com/products/everywhere/
+# * The credentials for this account stored in your ~/.netrc (machine qnx.com)
+# * A license stored under `/opt/score_qnx/license/licenses`
+# * Simply copy the directory ~/.qnx/license/licenses to the aforementioned directory. The directory ~/.qnx with the
+#   license included is created, when you install the QNX Software Development Platform (SDP) for QNX 8. Thus, you 1st
+#   have to install the QNX Software Center and then via the Software Center the QNX SDP for QNX 8.
+#   After the installation, you can find the directory ~/.qnx/license/licenses with the license file(s) in it.
+# If you get errors, when downloading files from the QNX server (e.g. WARNING: Download from
+# https://www.qnx.com/download/download/79858/installation.tgz failed) then the reason might be, that you did not yet
+# accept the "Download Center Usage Policy". In this case do the download once in the browser, which redirects you to
+# the acceptance page once.
+common:qnx_x86_64 --credential_helper_timeout="60s" # QNX credential helper can be slow
+common:qnx_x86_64 --platforms=@score_bazel_platforms//:x86_64-qnx-sdp_8.0.0-posix
+common:qnx_x86_64 --extra_toolchains=@score_qnx_x86_64_ifs_toolchain//:ifs-x86_64-qnx-sdp_8.0.0
+common:qnx_x86_64 --extra_toolchains=@score_qcc_x86_64_toolchain//:x86_64-qnx-sdp_8.0.0
+common:qnx_x86_64 --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_x86_64_pc_nto_qnx800
+common:qnx_x86_64 --credential_helper=*.qnx.com=%workspace%/third_party/qnx_credential_helper.py
+common:qnx_x86_64 --sandbox_writable_path=/var/tmp
+common:qnx_x86_64 --test_env=QEMU_CPU=Cascadelake-Server-v5
+
+common:qnx_arm64 --credential_helper_timeout="60s" # QNX credential helper can be slow
+common:qnx_arm64 --platforms=@score_bazel_platforms//:aarch64-qnx-sdp_8.0.0-posix
+common:qnx_arm64 --extra_toolchains=@score_qnx_aarch64_ifs_toolchain//:ifs-aarch64-qnx-sdp_8.0.0
+common:qnx_arm64 --extra_toolchains=@score_qcc_aarch64_toolchain//:aarch64-qnx-sdp_8.0.0
+common:qnx_arm64 --extra_toolchains=@score_toolchains_rust//toolchains/ferrocene:ferrocene_aarch64_unknown_nto_qnx800
+common:qnx_arm64 --credential_helper=*.qnx.com=%workspace%/third_party/qnx_credential_helper.py
+common:qnx_arm64 --sandbox_writable_path=/var/tmp
+common:qnx_arm64 --test_env=QEMU_CPU=Cascadelake-Server-v5
+
+common:qnx --config=qnx_x86_64
+
+# unshare /dev/shm and /tmp
+test --sandbox_tmpfs_path=/dev/shm
+test --sandbox_tmpfs_path=/tmp
+
+# Tests require to be run in a sandbox. Otherwise some will be flaky.
+test --nosandbox_default_allow_network
+
+# As explained in the CI design (https://github.com/eclipse-score/communication/blob/main/CI.md#check-and-merge-queue), we do not want to fail
+# because of a flaky test
+common:ci --flaky_test_attempts=5
+# We do not want in the CI a high frequency showing progress messages otherwise the log file will blow up
+# Still we do not want to disable it to be able to see if a job is directly hanging or even just know the current progress
+common:ci --show_progress_rate_limit=10
+
+# Bzlmod
+common --registry=https://raw.githubusercontent.com/eclipse-score/bazel_registry/refs/heads/main/
+common --registry=https://bcr.bazel.build
+common --check_direct_dependencies=error # Issue an error if a direct dependency version does not match with what is written in MODULE.bazel
+
+# Enable colored output for gtest
+build --test_env="GTEST_COLOR=1"
+
+# Configuration options required for quality assurance
+import %workspace%/quality/coverage/coverage.bazelrc
+import %workspace%/quality/sanitizer/sanitizer.bazelrc
+import %workspace%/quality/static_analysis/static_analysis.bazelrc
+
+# Use native sphinx_build_binary instead of the wrapper
+build --//docs/sphinx/utils:use_native_sphinx_build
+
+# Configure system JDK for plantuml
+build --java_language_version=21
+build --tool_java_language_version=21
+build --java_runtime_version=remotejdk_21
+build --tool_java_runtime_version=remotejdk_21
+
+# Import AI checker custom configuration
+try-import %workspace%/.bazelrc.ai_checker
+
+# Enable user-defined configs
+try-import %workspace%/user.bazelrc

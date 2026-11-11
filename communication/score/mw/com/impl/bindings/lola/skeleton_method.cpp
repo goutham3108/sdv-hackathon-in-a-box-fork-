@@ -1,0 +1,182 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/skeleton_method.h"
+
+#include "score/mw/com/impl/binding_type.h"
+#include "score/mw/com/impl/bindings/lola/element_fq_id.h"
+#include "score/mw/com/impl/bindings/lola/i_runtime.h"
+#include "score/mw/com/impl/bindings/lola/messaging/i_message_passing_service.h"
+#include "score/mw/com/impl/bindings/lola/methods/type_erased_call_queue.h"
+#include "score/mw/com/impl/bindings/lola/skeleton.h"
+#include "score/mw/com/impl/com_error.h"
+#include "score/mw/com/impl/methods/skeleton_method_binding.h"
+#include "score/mw/com/impl/runtime.h"
+
+#include "score/result/result.h"
+
+#include <sched.h>
+#include <score/assert.hpp>
+#include <score/span.hpp>
+
+#include <algorithm>
+#include <cstddef>
+#include <functional>
+#include <optional>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+namespace score::mw::com::impl::lola
+{
+
+SkeletonMethod::SkeletonMethod(Skeleton& skeleton, UniqueMethodIdentifier unique_method_identifier)
+    : in_args_type_erased_info_{},
+      return_type_type_erased_info_{},
+      type_erased_callback_{},
+      registration_guards_{},
+      registration_guards_mutex_{}
+{
+    skeleton.RegisterMethod(unique_method_identifier, *this);
+}
+
+Result<void> SkeletonMethod::RegisterHandler(SkeletonMethodBinding::TypeErasedHandler&& type_erased_callback)
+{
+    type_erased_callback_ = std::move(type_erased_callback);
+    return {};
+}
+
+Result<void> SkeletonMethod::OnProxyMethodSubscribeFinished(
+    const TypeErasedCallQueue::TypeErasedElementInfo type_erased_element_info,
+    const std::optional<score::cpp::span<std::byte>> in_arg_queue_storage,
+    const std::optional<score::cpp::span<std::byte>> return_queue_storage,
+    const ProxyMethodInstanceIdentifier proxy_method_instance_identifier,
+    const safecpp::Scope<>& method_call_handler_scope,
+    uid_t allowed_proxy_uid,
+    pid_t proxy_pid,
+    const QualityType asil_level)
+{
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        type_erased_callback_.has_value(),
+        "Cannot register a method call handler without a registered handler from Register()!");
+    // Note. the scope of the method call handler is owned by the parent Skeleton and will be expired during
+    // StopOfferService.
+    IMessagePassingService::MethodCallHandler method_call_callback{
+        method_call_handler_scope,
+        [this, in_arg_queue_storage, return_queue_storage, type_erased_element_info, asil_level](
+            std::size_t queue_position) {
+            std::optional<score::cpp::span<std::byte>> in_args_element_storage{};
+            std::optional<score::cpp::span<std::byte>> return_arg_element_storage{};
+
+            if (type_erased_element_info.in_arg_type_info.has_value())
+            {
+                SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD(in_arg_queue_storage.has_value());
+                in_args_element_storage = GetInArgValuesElementStorage(
+                    queue_position, in_arg_queue_storage.value(), type_erased_element_info);
+            }
+
+            if (type_erased_element_info.return_type_info.has_value())
+            {
+                SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD(return_queue_storage.has_value());
+                return_arg_element_storage = GetReturnValueElementStorage(
+                    queue_position, return_queue_storage.value(), type_erased_element_info);
+            }
+
+            Call(asil_level, in_args_element_storage, return_arg_element_storage);
+        }};
+
+    // Check SubscribeMethods for this skeleton_methods_ loop
+    CleanUpOldHandlers(proxy_method_instance_identifier.proxy_instance_identifier.application_id, proxy_pid);
+
+    auto& lola_runtime = GetBindingRuntime<lola::IRuntime>(BindingType::kLoLa);
+    auto& lola_message_passing = lola_runtime.GetLolaMessaging();
+    auto registration_result = lola_message_passing.RegisterMethodCallHandler(
+        asil_level, proxy_method_instance_identifier, std::move(method_call_callback), allowed_proxy_uid);
+    if (!(registration_result.has_value()))
+    {
+        return MakeUnexpected<void>(registration_result.error());
+    }
+
+    const std::lock_guard lock{registration_guards_mutex_};
+    const auto insertion_result = registration_guards_.emplace(
+        proxy_method_instance_identifier, std::make_pair(proxy_pid, std::move(registration_result).value()));
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        insertion_result.second,
+        "Any old registered handlers must have been unregistered (by destroying its registration "
+        "guard) before registering the new one and storing its registration guard in the map!");
+
+    return {};
+}
+
+bool SkeletonMethod::OnProxyMethodUnsubscribe(const ProxyMethodInstanceIdentifier proxy_method_instance_identifier)
+{
+    const std::lock_guard lock{registration_guards_mutex_};
+    const auto num_elements_erased = registration_guards_.erase(proxy_method_instance_identifier);
+    return num_elements_erased != 0U;
+}
+
+void SkeletonMethod::UnregisterMethodCallHandlers()
+{
+    const std::lock_guard lock{registration_guards_mutex_};
+    registration_guards_.clear();
+}
+
+bool SkeletonMethod::IsRegistered() const
+{
+    return type_erased_callback_.has_value();
+}
+
+void SkeletonMethod::Call(const QualityType quality_type,
+                          const std::optional<score::cpp::span<std::byte>> in_args,
+                          const std::optional<score::cpp::span<std::byte>> return_arg)
+{
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        type_erased_callback_.has_value(),
+        "Defensive programming: Call can only be called after OnProxyMethodSubscribeFinished has "
+        "registered the callback with message passing. We check in OnProxyMethodSubscribeFinished "
+        "that type_erased_callback_ has a value.");
+    std::invoke(type_erased_callback_.value(), quality_type, in_args, return_arg);
+}
+
+void SkeletonMethod::CleanUpOldHandlers(const GlobalConfiguration::ApplicationId application_id, pid_t proxy_pid)
+{
+    const std::lock_guard lock{registration_guards_mutex_};
+    const bool already_registered = std::any_of(
+        registration_guards_.cbegin(), registration_guards_.cend(), [&application_id, proxy_pid](const auto& entry) {
+            return (entry.first.proxy_instance_identifier.application_id == application_id) &&
+                   (entry.second.first == proxy_pid);
+        });
+
+    if (already_registered)
+    {
+        return;
+    }
+
+    // Linear scan to erase all stale guards from a crashed application (same application_id, different pid).
+    // If benchmarking identifies this as a bottleneck, the data structure can be revisited.
+    // NOTE: this can be replaced with erase_if in c++20
+    std::vector<ProxyMethodInstanceIdentifier> keys_to_erase;
+    for (const auto& entry : registration_guards_)
+    {
+        if (entry.first.proxy_instance_identifier.application_id == application_id)
+        {
+            keys_to_erase.push_back(entry.first);
+        }
+    }
+
+    for (const auto& key : keys_to_erase)
+    {
+        std::ignore = registration_guards_.erase(key);
+    }
+}
+
+}  // namespace score::mw::com::impl::lola

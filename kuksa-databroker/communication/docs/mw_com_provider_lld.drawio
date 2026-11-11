@@ -1,0 +1,332 @@
+<mxfile host="65bd71144e" pages="5">
+    <diagram id="mw-com-components" name="Component Block Diagram">
+        <mxGraphModel dx="1374" dy="779" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title-components" value="mw::com Provider - Component Block Diagram" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="240" y="30" width="690" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="provider" value="MwComProvider&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;registers with broker&lt;br&gt;runs receive loop&lt;br&gt;handles actuation&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="440" y="250" width="220" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="mapper" value="MwComMapper&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;message_to_update&lt;br&gt;actuation_to_message&lt;br&gt;quality and type checks&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="790" y="250" width="220" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="transport" value="MwComTransport&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;connect&lt;br&gt;subscribe&lt;br&gt;recv&lt;br&gt;send_actuation&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="130" y="250" width="220" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="broker" value="Kuksa Databroker&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;register_signals&lt;br&gt;provide_actuation&lt;br&gt;update_entries&lt;br&gt;actuate dispatch&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="440" y="500" width="220" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="config" value="ProviderConfig&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;mappings&lt;br&gt;reconnect&lt;br&gt;stale_after_ms&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="820" y="500" width="220" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="scidl" value="Config Model&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;generator-facing JSON model&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="820" y="100" width="220" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="ffi" value="Real mw::com FFI Transport&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;future generated bindings&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="80" y="90" width="270" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="mock" value="MockMwComTransport&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;current mock implementation&lt;br&gt;Tokio channels&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="80" y="470" width="270" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-transport-provider" value="uses trait object" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="transport" target="provider" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-provider-mapper" value="maps values" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="provider" target="mapper" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-provider-broker" value="internal broker API" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="provider" target="broker" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-mapper-config" value="reads mappings" style="endArrow=block;html=1;rounded=0;strokeWidth=2;entryX=0.359;entryY=0.01;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="mapper" target="config" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-scidl-config" value="generate_provider_config" style="endArrow=block;html=1;rounded=0;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" source="scidl" target="config" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="1080" y="190.99" as="sourcePoint"/>
+                        <mxPoint x="960" y="450" as="targetPoint"/>
+                        <Array as="points">
+                            <mxPoint x="930" y="230"/>
+                            <mxPoint x="1070" y="230"/>
+                            <mxPoint x="1070" y="550"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="edge-ffi-transport" value="future implementation" style="endArrow=block;html=1;rounded=0;dashed=1" parent="1" source="ffi" target="transport" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-mock-transport" value="default feature" style="endArrow=block;html=1;rounded=0;dashed=1" parent="1" source="mock" target="transport" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="mw-com-startup" name="Startup Sequence">
+        <mxGraphModel dx="1374" dy="779" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title-startup" value="mw::com Provider - Startup Sequence" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="250" y="25" width="670" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="s-main" value="Startup" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dae8fc;strokeColor=#6c8ebf" parent="1" vertex="1">
+                    <mxGeometry x="70" y="90" width="140" height="620" as="geometry"/>
+                </mxCell>
+                <mxCell id="s-config" value="ProviderConfig" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e1d5e7;strokeColor=#9673a6" parent="1" vertex="1">
+                    <mxGeometry x="270" y="90" width="140" height="620" as="geometry"/>
+                </mxCell>
+                <mxCell id="s-provider" value="MwComProvider" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dae8fc;strokeColor=#6c8ebf" parent="1" vertex="1">
+                    <mxGeometry x="470" y="90" width="140" height="620" as="geometry"/>
+                </mxCell>
+                <mxCell id="s-mapper" value="MwComMapper" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#d5e8d4;strokeColor=#82b366" parent="1" vertex="1">
+                    <mxGeometry x="670" y="90" width="140" height="620" as="geometry"/>
+                </mxCell>
+                <mxCell id="s-broker" value="DataBroker" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#f8cecc;strokeColor=#b85450" parent="1" vertex="1">
+                    <mxGeometry x="870" y="90" width="140" height="620" as="geometry"/>
+                </mxCell>
+                <mxCell id="s-transport" value="MwComTransport" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#ffe6cc;strokeColor=#d79b00" parent="1" vertex="1">
+                    <mxGeometry x="1040" y="90" width="140" height="620" as="geometry"/>
+                </mxCell>
+                <mxCell id="startup-1" value="load_json(config_path)" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-main" target="s-config" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="210" y="170"/>
+                            <mxPoint x="270" y="170"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-2" value="from_config_file(...)" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-main" target="s-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="210" y="230"/>
+                            <mxPoint x="470" y="230"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-3" value="MwComMapper::new(config)" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-provider" target="s-mapper" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="610" y="290"/>
+                            <mxPoint x="670" y="290"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-4" value="register_with_broker()" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-main" target="s-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="210" y="350"/>
+                            <mxPoint x="470" y="350"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-5" value="signal_intervals()" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-provider" target="s-mapper" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="610" y="410"/>
+                            <mxPoint x="670" y="410"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-6" value="register_signals(...)" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-provider" target="s-broker" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="610" y="470"/>
+                            <mxPoint x="870" y="470"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-7" value="provide_actuation(...)" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-provider" target="s-broker" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="610" y="530"/>
+                            <mxPoint x="870" y="530"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-8" value="run_until_shutdown(...)" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-main" target="s-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="210" y="590"/>
+                            <mxPoint x="470" y="590"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="startup-9" value="connect() and subscribe(...)" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="s-provider" target="s-transport" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="610" y="650"/>
+                            <mxPoint x="1040" y="650"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="mw-com-inbound" name="Inbound Datapoint Flow">
+        <mxGraphModel dx="1374" dy="779" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title-inbound" value="mw::com Provider - Inbound Datapoint Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="245" y="25" width="680" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="mw-event" value="mw::com&lt;br&gt;service/member event" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="70" y="250" width="170" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="in-transport" value="MwComTransport.recv()&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;returns MwComMessage&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="340" y="250" width="180" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="in-provider" value="MwComProvider&lt;br&gt;recv_and_publish_one()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="650" y="250" width="190" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="in-mapper" value="MwComMapper.message_to_update()&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;lookup mapping&lt;br&gt;check direction&lt;br&gt;check quality/freshness&lt;br&gt;convert and scale&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="925" y="220" width="220" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="in-update" value="EntryUpdate&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;path + datapoint&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="930" y="450" width="220" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="in-broker" value="DataBroker.update_entries(...)&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;stores datapoint&lt;br&gt;notifies subscribers&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="450" y="450" width="230" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="in-clients" value="Kuksa clients&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;read or subscribe to VSS data&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="70" y="450" width="210" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-in-1" value="event" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="mw-event" target="in-transport" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-in-2" value="MwComMessage" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="in-transport" target="in-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-in-3" value="map" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="in-provider" target="in-mapper" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-in-4" value="signal_id + EntryUpdate" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="in-mapper" target="in-update" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-in-5" value="authorized_access + update_entries" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="in-update" target="in-broker" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-in-6" value="gRPC read/subscribe" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="in-broker" target="in-clients" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="mw-com-outbound" name="Outbound Actuation Flow">
+        <mxGraphModel dx="1374" dy="779" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title-outbound" value="mw::com Provider - Outbound Actuation Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="245" y="25" width="680" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="out-client" value="Kuksa Client&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;Actuate / BatchActuate&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="10" y="250" width="180" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="out-grpc" value="kuksa.val.v2 gRPC&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;validates request and permissions&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="280" y="250" width="180" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="out-broker" value="DataBroker&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;actuate / batch_actuate&lt;br&gt;dispatches to registered provider&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="590" y="240" width="180" height="110" as="geometry"/>
+                </mxCell>
+                <mxCell id="out-provider" value="MwComProvider.actuate(...)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="950" y="250" width="180" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="out-mapper" value="MwComMapper.actuation_to_message()&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;lookup by signal_id&lt;br&gt;check direction&lt;br&gt;convert DataValue to MwComValue&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="910" y="450" width="240" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="out-transport" value="MwComTransport.send_actuation(...)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="480" y="470" width="250" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="out-mw" value="mw::com&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;service/member write or command&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="60" y="470" width="220" height="90" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-out-1" value="request" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="out-client" target="out-grpc" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-out-2" value="broker.actuate" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="out-grpc" target="out-broker" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-out-3" value="ActuationProvider::actuate" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="out-broker" target="out-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-out-4" value="ActuationChange" style="endArrow=block;html=1;rounded=0;strokeWidth=2;entryX=0.538;entryY=0.008;entryDx=0;entryDy=0;entryPerimeter=0;" parent="1" source="out-provider" target="out-mapper" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-out-5" value="MwComMessage" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="out-mapper" target="out-transport" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-out-6" value="generated mw::com call" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="out-transport" target="out-mw" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+    <diagram id="mw-com-end-to-end" name="End-to-End Architecture">
+        <mxGraphModel dx="1374" dy="779" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title-e2e" value="mw::com Provider - End-to-End Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="245" y="25" width="680" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="group-mw" value="mw::com Side" style="swimlane;whiteSpace=wrap;html=1;startSize=30;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="60" y="120" width="280" height="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-service" value="Service / Instance / Member" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666" parent="group-mw" vertex="1">
+                    <mxGeometry x="45" y="80" width="190" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-ffi" value="Generated FFI Transport&lt;br&gt;&lt;font style=&quot;font-size: 11px;&quot;&gt;future implementation&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#666666" parent="group-mw" vertex="1">
+                    <mxGeometry x="45" y="270" width="190" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="group-provider" value="mw_com_provider" style="swimlane;whiteSpace=wrap;html=1;startSize=30;fillColor=#eef7ee;strokeColor=#82b366;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="420" y="120" width="320" height="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-transport" value="MwComTransport" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1" parent="group-provider" vertex="1">
+                    <mxGeometry x="65" y="70" width="190" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-provider" value="MwComProvider" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1" parent="group-provider" vertex="1">
+                    <mxGeometry x="65" y="210" width="190" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-mapper" value="MwComMapper" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1" parent="group-provider" vertex="1">
+                    <mxGeometry x="65" y="350" width="190" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="group-broker" value="Kuksa Databroker" style="swimlane;whiteSpace=wrap;html=1;startSize=30;fillColor=#fff0f0;strokeColor=#b85450;fontStyle=1" parent="1" vertex="1">
+                    <mxGeometry x="820" y="120" width="300" height="520" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-reg" value="register_signals&lt;br&gt;provide_actuation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450" parent="group-broker" vertex="1">
+                    <mxGeometry x="55" y="70" width="190" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-update" value="update_entries" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450" parent="group-broker" vertex="1">
+                    <mxGeometry x="55" y="220" width="190" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2e-dispatch" value="actuate dispatch" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#b85450" parent="group-broker" vertex="1">
+                    <mxGeometry x="55" y="360" width="190" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-e2e-1" value="events and commands" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="e2e-service" target="e2e-ffi" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-e2e-2" value="real transport implementation" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeWidth=2;dashed=1" parent="1" source="e2e-ffi" target="e2e-transport" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-e2e-3" value="recv / send_actuation" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="e2e-transport" target="e2e-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-e2e-4" value="map values" style="endArrow=block;startArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="e2e-provider" target="e2e-mapper" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-e2e-5" value="startup registration" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="e2e-provider" target="e2e-reg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-e2e-6" value="datapoint writes" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="e2e-provider" target="e2e-update" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="edge-e2e-7" value="actuator callback" style="endArrow=block;html=1;rounded=0;strokeWidth=2" parent="1" source="e2e-dispatch" target="e2e-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

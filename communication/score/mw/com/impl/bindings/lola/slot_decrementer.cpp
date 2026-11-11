@@ -1,0 +1,70 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/slot_decrementer.h"
+
+#include "score/mw/com/impl/bindings/lola/control_slot_types.h"
+#include "score/mw/com/impl/bindings/lola/transaction_log_local_view.h"
+
+namespace score::mw::com::impl::lola
+{
+
+SlotDecrementer::SlotDecrementer(ConsumerEventDataControlLocalView<>& event_data_control_local,
+                                 const SlotIndexType event_slot_index) noexcept
+    : event_data_control_local_{&event_data_control_local}, event_slot_index_{event_slot_index}
+{
+}
+
+SlotDecrementer::~SlotDecrementer() noexcept
+{
+    internal_delete();
+}
+
+SlotDecrementer::SlotDecrementer(SlotDecrementer&& other) noexcept
+    : event_data_control_local_{other.event_data_control_local_},
+      // Suppress "AUTOSAR C++14 A12-8-4" rule finding. This rule states: "Move constructor shall not initialize its
+      // class members and base classes using copy semantics."
+      // Rationale: False positive - std::move is used which will result in the move constructor of
+      // event_slot_index_ being called.
+      // coverity[autosar_cpp14_a12_8_4_violation : FALSE]
+      event_slot_index_{std::move(other.event_slot_index_)}
+{
+    other.event_data_control_local_ = nullptr;
+}
+
+// Suppress "AUTOSAR C++14 A6-2-1" rule violation. The rule states "Move and copy assignment operators shall either move
+// or respectively copy base classes and data members of a class, without any side effects." Due to architectural
+// decisions, SlotDecrementer must perform a cleanup and update references to itself in its events and fields.
+// Therefore, side effects are required.
+// coverity[autosar_cpp14_a6_2_1_violation]
+SlotDecrementer& SlotDecrementer::operator=(SlotDecrementer&& other) noexcept
+{
+    if (this != &other)
+    {
+        internal_delete();
+        event_data_control_local_ = other.event_data_control_local_;
+        event_slot_index_ = other.event_slot_index_;
+
+        other.event_data_control_local_ = nullptr;
+    }
+    return *this;
+}
+
+void SlotDecrementer::internal_delete() noexcept
+{
+    if (event_data_control_local_ != nullptr)
+    {
+        event_data_control_local_->DereferenceEvent(event_slot_index_);
+    }
+}
+
+}  // namespace score::mw::com::impl::lola

@@ -1,0 +1,224 @@
+@startuml structural_view
+
+skinparam linetype ortho
+
+class "score::concurrency::Executor" as Executor {
+  - memory_resource_: score::cpp::pmr::memory_resource*
+  --
+  + MaxConcurrencyLevel() const noexcept: std::size_t
+  + ShutdownRequested() const noexcept: bool
+  + Shutdown() noexcept: void
+  + Post(score::cpp::pmr::unique_ptr<Task> task): void
+  template<class CallableType, class... ArgumentTypes>
+  + Post(CallableType&& callable, ArgumentTypes&&... arguments): void
+  template<class CallableType, class... ArgumentTypes>
+  + Submit(CallableType&& callable, ArgumentTypes&&... arguments): auto
+  --
+  # {abstract} Enqueue(score::cpp::pmr::unique_ptr<Task> task): void
+  template<class ExecutorType, class CallableType, class... ArgumentTypes>
+  # {static} DoPost(ExecutorType& executor, CallableType&& callable, ArgumentTypes&&... arguments): void
+  template<class ExecutorType, class CallableType, class... ArgumentTypes>
+  # {static} DoSubmit(ExecutorType& executor, CallableType&& callable, ArgumentTypes&&... arguments): auto
+  --
+  Notes:
+  By enforcing that CallableTypes first argument
+  is an score::cpp::stop_token, we can signal the user
+  that he needs to think about how his thread can
+  be stopped gracefully.
+}
+
+class "score::concurrency::ThreadPool" as ThreadPool {
+  - std::vector<score::cpp::jthread> pool{}
+  - score::cpp::pmr::deque<score::cpp::pmr::unique_ptr<Task>> task_pool{}
+  --
+  + ThreadPool(numberOfThreads: std::size_t)
+  + ThreadPool(numberOfThreads: size_t, score::cpp::pmr::memory_resource*)
+  + MaxConcurrencyLevel() const noexcept: std::size_t
+  + ShutdownRequested() const noexcept: bool
+  + Shutdown() noexcept: void
+  + Enqueue(score::cpp::pmr::unique_ptr<Task> task): void
+  --
+  Notes:
+  Only Move, no Copy.
+  Enqueue needs to be thread-safe
+}
+
+class "score::cpp::jthread" as JThread {
+  Notes:
+  Custom implementation of std::jthread (only C++20)
+}
+
+class "score::concurrency::TimedExecutor" as TimedExecutor {
+  - memory_resource_: score::cpp::pmr::memory_resource*
+  --
+  + MaxConcurrencyLevel() const noexcept: std::size_t
+  + ShutdownRequested() const noexcept: bool
+  + Shutdown() noexcept: void
+  + Post(score::cpp::pmr::unique_ptr<TimedTask> task): void
+  template<class CallableType, class... ArgumentTypes>
+  + Post(Duration interval, CallableType&& callable, ArgumentTypes&&... arguments): void
+  template<class CallableType, class... ArgumentTypes>
+  + Post(TimePoint execution_point, CallableType&& callable, ArgumentTypes&&... arguments): void
+  --
+  - {abstract} Enqueue(score::cpp::pmr::unique_ptr<TimedTask> task): void
+  template<class ExecutorType, class CallableType, class... ArgumentTypes>
+  - {static} DoPost(ExecutorType& executor, TimePoint execution_point,
+  CallableType&& callable, ArgumentTypes&&... arguments): void
+  template<class ExecutorType, class CallableType, class... ArgumentTypes>
+  - {static} DoPost(ExecutorType& executor, TimePoint first_execution,
+  Duration interval, CallableType&& callable, ArgumentTypes&&... arguments): void
+  --
+  Notes:
+  By enforcing that CallableTypes first argument
+  is an score::cpp::stop_token, we can signal the user
+  that he needs to think abouth how his thread can
+  be stopped gracefully.
+}
+
+
+class "score::concurrency::ConcurrentTimedExecutor" as ConcurrentTimedExecutor {
+  - Work()
+  --
+  - executor_: unique_ptr<Executor>
+  - queue_: deque<pair<TimePoint, unique_ptr<TimedTask<Clock>>>>
+  - free_: set<shared_ptr<InterruptibleConditionalVariable>>
+  - waiting_: set<pair<TimePoint, shared_ptr<InterruptibleConditionalVariable>>>
+}
+
+class "score::cpp::stop_token" as StopToken {
+  Notes:
+  Custom implementation of
+  std::stop_token (only C++20)
+}
+
+class "score::concurrency::Task" as Task {
+  --
+  + operator()(const score::cpp::stop_token): void
+  + GetStopSource(): score::cpp::stop_source&
+}
+
+class "score::concurrency::SimpleTaskBase<CallableType, ResultType>" as SimpleTaskBase {
+  --
+  template<LocalCallableType>
+  + SimpleTask(ConstructionGuard, std::promise<auto>&&, LocalCallableType&&)
+  + operator()(const score::cpp::stop_token): void
+  + GetStopSource(): score::cpp::stop_source&
+  --
+  Note: Not Copyable, Movable
+}
+
+class "score::concurrency::TimedTask<Clock>" as TimedTask {
+  --
+  + GetNextExecutionPoint(): optional<TimePoint>
+}
+
+class "score::concurrency::PeriodicTask<Clock, CallableType>" as PeriodicTask {
+  Note: Not Copyable, Movable
+}
+
+class "score::concurrency::DelayedTask<Clock, CallableType>" as DelayedTask {
+  Note: Not Copyable, Movable
+}
+
+skinparam noteFontName monospaced
+note as N1
+Example:
+std::shared_ptr<Executor> unit = std::make_shared<ThreadPool>(5);
+// Will not compile, with static_assert failure
+unit->post([](){
+  std::cout << "Some work..." << std::endl;
+});
+unit->post([](const score::cpp::stop_token& stop){
+  while
+    (!stop.stop_requested()) {
+      std::cout << "Some work..." << std::endl;
+    }
+});
+auto result = unit->submit([](const score::cpp::stop_token&) -> int {
+  return 42;
+});
+std::cout << result.get() << std::endl;
+unit->shutdown();
+end note
+
+class "score::concurrency::SimpleTask<CallableType, ResultType>" as SimpleTask {
+  --
+  template<LocalCallableType>
+  + SimpleTask(ConstructionGuard, std::promise<auto>&&, LocalCallableType&&)
+  + operator()(Executor&, const score::cpp::stop_token): void
+  + GetStopSource(): score::cpp::stop_source&
+  --
+  Note: Not Copyable, Movable
+}
+
+class "score::concurrency::SimpleTask<CallableType>" as SimpleTask_template {
+  --
+  template<LocalCallableType>
+  + SimpleTask(ConstructionGuard, std::promise<auto>&&, LocalCallableType&&)
+  + operator()(Executor&, const score::cpp::stop_token): void
+  + GetStopSource(): score::cpp::stop_source&
+  --
+  Note: Not Copyable, Movable
+}
+
+class "score::concurrency::PeriodicTaskFactory" as PeriodicTaskFactory {
+  --
+  template<Clock, LocalCallableType, Arguments...>
+  + Make(score::cpp::pmr::memory_resource*, Executor&,
+  std::promise<void>&&, Clock::time_point, Clock::duration, CallableType&&, Arguments&&...):
+  score::cpp::pmr::unique_ptr<PeriodicTask<Clock>>
+  template<Clock, LocalCallableType, Arguments...>
+  + MakeWithTaskResult(score::cpp::pmr::memory_resource*, Executor&,
+  std::promise<void>&&, Clock::time_point, Clock::duration, CallableType&&, Arguments&&...):
+  std::pair<TaskResult<void>, score::cpp::pmr::unique_ptr<PeriodicTask<Clock>>>
+}
+
+class "score::concurrency::DelayedTaskFactory" as DelayedTaskFactory {
+  --
+  template<Clock, LocalCallableType, Arguments...>
+  + Make(score::cpp::pmr::memory_resource*,
+  Executor&, std::promise<void>&&, Clock::time_point, CallableType&&, Arguments&&...):
+  score::cpp::pmr::unique_ptr<DelayedTask<Clock>>
+  template<Clock, LocalCallableType, Arguments...>
+  + MakeWithTaskResult(score::cpp::pmr::memory_resource*,
+  Executor&, std::promise<void>&&, Clock::time_point, CallableType&&, Arguments&&...):
+  std::pair<TaskResult<void>, score::cpp::pmr::unique_ptr<DelayedTask<Clock>>>
+}
+
+
+class "score::concurrency::SimpleTaskFactory" as SimpleTaskFactory {
+  --
+  template<Clock, LocalCallableType, Arguments...>
+  + Make(score::cpp::pmr::memory_resource*, CallableType&&, Arguments&&...):
+  score::cpp::pmr::unique_ptr<SimpleTask>
+  template<Clock, LocalCallableType, Arguments...>
+  + MakeWithTaskResult(score::cpp::pmr::memory_resource*, CallableType&&, Arguments&&...):
+  std::pair<TaskResult<void>, score::cpp::pmr::unique_ptr<SimpleTask>>
+}
+
+JThread -u-* ThreadPool: manages
+
+TimedTask -d-o TimedExecutor : enqueues
+ConcurrentTimedExecutor -u.|> TimedExecutor
+
+ConcurrentTimedExecutor -u-> Executor
+
+StopToken -l-o Executor : checks for
+
+Task -l-o Executor : enqueues
+
+TimedTask -u.|> Task
+SimpleTaskBase -u.|> Task
+SimpleTask -u.|> SimpleTaskBase
+SimpleTask_template -u.|> SimpleTaskBase: ResultType=void
+
+DelayedTask -u.|> TimedTask
+PeriodicTask -u.|> TimedTask
+
+SimpleTaskFactory -u-> SimpleTask: <<create>>
+SimpleTaskFactory -u-> SimpleTask_template: <<create>>
+
+PeriodicTaskFactory -u-> PeriodicTask: <<create>>
+DelayedTaskFactory -u-> DelayedTask: <<create>>
+
+@enduml

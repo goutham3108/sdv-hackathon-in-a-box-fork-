@@ -1,0 +1,236 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Workflow configuration for automated release process
+# This workflow is triggered manually via workflow_dispatch and expects a release tag input.
+# It runs all checks first; only once every check has passed does it create the
+# draft release and upload the resulting artifacts to it.
+
+name: Automated Release Process
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to create (example: v1.2.3)"
+        required: true
+        type: string
+
+env:
+  ANDROID_HOME: ""
+  ANDROID_SDK_ROOT: ""
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  run-host-quality:
+    uses: ./.github/workflows/build_and_test_host.yml
+    with:
+      cache-mode: read-only
+    permissions:
+      contents: read
+      actions: write
+      security-events: write
+    secrets:
+      UBUNTU_SNAPSHOT_MIRROR_URL: ${{ secrets.UBUNTU_SNAPSHOT_MIRROR_URL }}
+
+  run-build-and-test-qnx:
+    uses: ./.github/workflows/build_and_test_qnx.yml
+    with:
+      cache_mode: read-only
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    secrets:
+      SCORE_QNX_LICENSE: ${{ secrets.SCORE_QNX_LICENSE }}
+      SCORE_QNX_USER: ${{ secrets.SCORE_QNX_USER }}
+      SCORE_QNX_PASSWORD: ${{ secrets.SCORE_QNX_PASSWORD }}
+      UBUNTU_SNAPSHOT_MIRROR_URL: ${{ secrets.UBUNTU_SNAPSHOT_MIRROR_URL }}
+
+  run-nightly-quality:
+    uses: ./.github/workflows/nightly_quality.yml
+    permissions:
+      contents: write
+      actions: write
+      security-events: write
+    secrets:
+      UBUNTU_SNAPSHOT_MIRROR_URL: ${{ secrets.UBUNTU_SNAPSHOT_MIRROR_URL }}
+      SCORE_QNX_LICENSE: ${{ secrets.SCORE_QNX_LICENSE }}
+      SCORE_QNX_USER: ${{ secrets.SCORE_QNX_USER }}
+      SCORE_QNX_PASSWORD: ${{ secrets.SCORE_QNX_PASSWORD }}
+
+  run-docs-build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set up Bazel
+        uses: ./.github/actions/00_infrastructure/prepare_bazel_environment
+        with:
+          disk-cache: build_docs
+          cache-mode: read-only
+          ubuntu-snapshot-mirror-url: ${{ secrets.UBUNTU_SNAPSHOT_MIRROR_URL }}
+
+      - name: Build and package Sphinx documentation
+        uses: ./.github/actions/10_docs/build_sphinx_package
+        with:
+          docs-version: ${{ github.event.inputs.release_tag }}
+          docs-base-url: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          lobster-source-root: https://github.com/${{ github.repository }}/blob/main/
+          repository-name: ${{ github.event.repository.name }}
+          output-dir: docs_output
+          archive-name: docs-${{ github.event.inputs.release_tag }}.tar.gz
+
+      - name: Upload docs archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}_docs_release_${{ github.event.inputs.release_tag }}
+          path: docs-${{ github.event.inputs.release_tag }}.tar.gz
+
+  # --------------------------------------------------------------------
+  # Only create the draft release once every check above has passed.
+  # --------------------------------------------------------------------
+  create-draft-release:
+    needs:
+      - run-host-quality
+      - run-build-and-test-qnx
+      - run-nightly-quality
+      - run-docs-build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      release-id: ${{ steps.create-release.outputs.id }}
+      release-url: ${{ steps.create-release.outputs.url }}
+      release-tag: ${{ steps.release-tag.outputs.release-tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Set release tag from workflow dispatch input
+        id: release-tag
+        run: |
+          echo "Release version tag: ${{ github.event.inputs.release_tag }}"
+          echo "release-tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+
+      - name: Create draft release
+        id: create-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release-tag.outputs.release-tag }}
+          name: ${{ steps.release-tag.outputs.release-tag }}
+          body_path: .github/RELEASE_TEMPLATE.md
+          draft: true
+          prerelease: false
+          target_commitish: ${{ github.sha }}
+
+  upload-quality-reports:
+    needs:
+      - create-draft-release
+      - run-nightly-quality
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      # ------------------------------------------------------------------
+      # nightly_quality.yml's deploy-quality-reports job already downloads,
+      # merges, and packages coverage/clang-tidy/clippy/CodeQL findings plus
+      # the generated dashboard into a single "nightly-quality-reports"
+      # artifact — reuse it directly instead of duplicating that logic here.
+      # ------------------------------------------------------------------
+      - name: Download unified quality reports artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-quality-reports
+          path: ./_quality
+
+      - name: Package and upload quality reports to existing draft release
+        run: |
+          VERSION="${{ needs.create-draft-release.outputs.release-tag }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          ARCHIVE="${REPO_NAME}_quality_reports_${VERSION}.zip"
+          (cd _quality && zip -r "../${ARCHIVE}" .)
+          gh release upload "${VERSION}" "${ARCHIVE}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  upload-docs-report:
+    needs:
+      - create-draft-release
+      - run-docs-build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Download docs archive artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ github.event.repository.name }}_docs_release_${{ github.event.inputs.release_tag }}
+          path: ./
+
+      - name: Upload docs archive to existing draft release
+        run: |
+          gh release upload "${{ needs.create-draft-release.outputs.release-tag }}" "docs-${{ github.event.inputs.release_tag }}.tar.gz" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  finalize-release:
+    runs-on: ubuntu-24.04
+    needs:
+      - create-draft-release
+      - upload-quality-reports
+      - upload-docs-report
+    if: ${{ success() }}
+    permissions:
+      contents: write
+    steps:
+      - name: Report success
+        run: |
+          echo "All checks succeeded. Draft release ${{ needs.create-draft-release.outputs.release-tag }} is ready for manual publishing."
+
+  delete-release-on-failure:
+    runs-on: ubuntu-24.04
+    needs:
+      - create-draft-release
+      - upload-quality-reports
+      - upload-docs-report
+    # Only reached if the draft release was actually created (i.e. all checks
+    # passed) but something went wrong afterwards (uploads failed/cancelled).
+    # If a check fails, create-draft-release never runs and there is nothing
+    # to clean up.
+    if: ${{ failure() && needs.create-draft-release.result == 'success' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+      - name: Delete draft release due to failure
+        run: |
+          gh release delete ${{ needs.create-draft-release.outputs.release-tag }} --yes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Report failure
+        run: |
+          echo "Uploading artifacts to the draft release failed. Draft release has been deleted."
+          exit 1

@@ -1,0 +1,7 @@
+{
+    "ecuId": "ECU1",
+    "appId": "UNKN",
+    "logLevel": "kInfo",
+    "logMode": "kRemote|kConsole|kFile|kSystem",
+    "contextConfigs": ""
+}

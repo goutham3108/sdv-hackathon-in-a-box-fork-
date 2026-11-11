@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package sdv.databroker.v1;
+
+import "sdv/databroker/v1/types.proto";
+
+message GetDatapointsRequest { repeated string datapoints = 1; }
+message GetDatapointsReply { map<string, Datapoint> datapoints = 1; }
+message SetDatapointsRequest { map<string, Datapoint> datapoints = 1; }
+message SetDatapointsReply { map<string, DatapointError> errors = 1; }
+message SubscribeRequest { string query = 2; }
+message SubscribeReply { map<string, Datapoint> fields = 1; }
+message GetMetadataRequest { repeated string names = 1; }
+message GetMetadataReply { repeated Metadata list = 1; }
+
+service Broker {
+  rpc GetDatapoints(GetDatapointsRequest) returns (GetDatapointsReply);
+  rpc SetDatapoints(SetDatapointsRequest) returns (SetDatapointsReply);
+  rpc Subscribe(SubscribeRequest) returns (stream SubscribeReply);
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataReply);
+}

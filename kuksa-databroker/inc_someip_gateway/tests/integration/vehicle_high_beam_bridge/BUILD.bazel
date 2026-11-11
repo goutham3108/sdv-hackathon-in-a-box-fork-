@@ -1,0 +1,19 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+
+cc_binary(
+    name = "vehicle_high_beam_bridge",
+    srcs = ["main.cpp"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "@score_lifecycle//score/launch_manager:lifecycle_cc",
+        "//tests/integration:high_beam_udp_protocol",
+        "@score_logging//score/mw/log:log",
+        "@vsomeip",
+    ],
+)

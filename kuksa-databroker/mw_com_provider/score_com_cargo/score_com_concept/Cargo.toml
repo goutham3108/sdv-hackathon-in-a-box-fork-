@@ -1,0 +1,15 @@
+[package]
+name = "score_com_concept"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "../../../../communication/score/mw/com/rust/score_com_concept/lib.rs"
+
+[dependencies]
+containers = { path = "../../../../baselibs/score/containers_rust" }
+futures = "0.3"
+pastey = "0.2.3"
+score_com_macros = { path = "../score_com_macros" }
+score_log = { path = "../../../../baselibs/score/log_rust/score_log" }
+thiserror = "2"

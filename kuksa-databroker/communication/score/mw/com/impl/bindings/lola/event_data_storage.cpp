@@ -1,0 +1,139 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/event_data_storage.h"
+
+#include "score/language/safecpp/safe_math/safe_math.h"
+#include "score/memory/shared/memory_resource_proxy.h"
+
+#include <score/assert.hpp>
+
+#include <functional>
+#include <tuple>
+
+namespace score::mw::com::impl::lola
+{
+
+EventDataStorage::EventDataStorage(const memory::shared::MemoryResourceProxy* memory_resource_proxy,
+                                   SlotIndexType number_of_slots,
+                                   memory::DataTypeSizeInfo event_sample_size_info,
+                                   const std::optional<InitializeSampleCallback>& initialize_sample_callback)
+    : number_of_slots_(number_of_slots),
+      sample_size_info_(event_sample_size_info),
+      type_erased_data_slots_(nullptr),
+      type_erased_data_slots_storage_size_in_bytes_(0),
+      memory_resource_proxy_(memory_resource_proxy)
+{
+    const auto storage_bytes_needed_result =
+        safe_math::Multiply<safe_math::ReturnMode::kReturnResultOnError, std::size_t>(number_of_slots,
+                                                                                      event_sample_size_info.Size());
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        storage_bytes_needed_result.has_value(),
+        "Overflow while calculating the total size of the raw event-data slot-array.");
+    const auto storage_bytes_needed = storage_bytes_needed_result.value();
+
+    // The alignment used here must match exactly the alignment CalculateServiceDataStorageShmSize() assumes for this
+    // allocation (see service_data_storage.cpp), i.e. event_sample_size_info.Alignment(). Using a different (e.g.
+    // hardcoded, stricter) alignment here would make the analytically calculated shm-size wrong (too small).
+    void* const type_erased_data_slots_start =
+        memory_resource_proxy_->allocate(storage_bytes_needed, event_sample_size_info.Alignment());
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD(nullptr != type_erased_data_slots_start);
+    type_erased_data_slots_ = static_cast<std::byte*>(type_erased_data_slots_start);
+    type_erased_data_slots_storage_size_in_bytes_ = storage_bytes_needed;
+
+    // Construction and initialization of the slots is done as one step: if the caller handed over an initializer,
+    // use it to initialize (e.g. default-construct) every slot right away. The callback might be empty if the
+    // binding independent layer doesn't need to initialize the slots (e.g. for a generic event or a simulation-only
+    // call solely used to calculate the required shared-memory size).
+    if (initialize_sample_callback.has_value())
+    {
+        InitializeSlots(*initialize_sample_callback);
+    }
+}
+
+// Deviation of MISRA RULE-18-5-1: codeql::misra_deviation_next_line(destructor-contract-violation-terminate)
+EventDataStorage::~EventDataStorage() noexcept
+{
+    if (type_erased_data_slots_ != nullptr)
+    {
+        memory_resource_proxy_->deallocate(type_erased_data_slots_.get(),
+                                           type_erased_data_slots_storage_size_in_bytes_);
+    }
+}
+
+void EventDataStorage::InitializeSlots(const InitializeSampleCallback& initialization_callback)
+{
+    // Retrieve 1st/last slot raw-pointers from OffsetPtrs, which includes bounds-checking.
+    auto* first_slot_raw_ptr = type_erased_data_slots_.get();
+    const auto last_slot_offset = sample_size_info_.Size() * (number_of_slots_ - 1U);
+    auto last_slot_ptr = type_erased_data_slots_ + decltype(type_erased_data_slots_)::difference_type(last_slot_offset);
+    auto* last_slot_raw_ptr = last_slot_ptr.get();
+
+    // This is our low-level data storage, where we work on type-erased data, thus pointer arithmetic can't be avoided.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic) see above
+    for (auto* current_slot_raw_ptr = first_slot_raw_ptr; current_slot_raw_ptr <= last_slot_raw_ptr;
+         current_slot_raw_ptr += sample_size_info_.Size())
+    {
+        std::invoke(initialization_callback, current_slot_raw_ptr);
+    }
+}
+
+void* EventDataStorage::GetTypeErasedDataSlot(SlotIndexType index, size_t data_size) const
+{
+    SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD(index < number_of_slots_);
+
+    SCORE_LANGUAGE_FUTURECPP_PRECONDITION_PRD(data_size == sample_size_info_.Size());
+    const auto element_offset = data_size * index;
+
+    // we apply the required bounds-checking:
+    // Verify, that the start of the type-erased storage is still within bounds
+    auto* const slots_start_address = type_erased_data_slots_.get();
+    // Verify, that the complete slot to be accessed in the type-erased storage is still within bounds.
+    const auto slot_last_byte_offset_ptr =
+        type_erased_data_slots_ + decltype(type_erased_data_slots_)::difference_type(element_offset + data_size - 1U);
+    score::cpp::ignore = slot_last_byte_offset_ptr.get();
+
+    // In our architecture we have a one-to-one mapping between pointers and integral values.
+    // The preconditions above guarantee that element_address will always point inside type_erased_data_slots_.
+    // Therefore, casting between integers and pointers is well-defined in this case.
+    // NOLINTNEXTLINE(score-banned-function) see above
+    auto* const element_address = memory::shared::AddOffsetToPointer(slots_start_address, element_offset);
+
+    return element_address;
+}
+
+SlotIndexType EventDataStorage::GetNumberOfSlots() const
+{
+    return number_of_slots_;
+}
+
+void AddEventDataStorageShmSizeAllocation(std::vector<score::memory::DataTypeSizeInfo>& allocation_sequence,
+                                          EventDataStorageSizeInfo event_data_storage_size_info)
+{
+    std::ignore = allocation_sequence.emplace_back(sizeof(EventDataStorage), alignof(EventDataStorage));
+
+    // This mirrors exactly how EventDataStorage's constructor computes the size of its type_erased_data_slots_
+    // allocation (see above): number_of_slots * per_sample_size_info.Size(), aligned to per_sample_size_info's
+    // alignment.
+    const auto& per_sample_size_info = event_data_storage_size_info.per_sample_size_info;
+    const auto storage_bytes_needed_result =
+        safe_math::Multiply<safe_math::ReturnMode::kReturnResultOnError, std::size_t>(
+            event_data_storage_size_info.number_of_slots, per_sample_size_info.Size());
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(
+        storage_bytes_needed_result.has_value(),
+        "Overflow while calculating the total size of the raw event-data slot-array.");
+
+    std::ignore =
+        allocation_sequence.emplace_back(storage_bytes_needed_result.value(), per_sample_size_info.Alignment());
+}
+
+}  // namespace score::mw::com::impl::lola

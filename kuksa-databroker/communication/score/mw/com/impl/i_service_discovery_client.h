@@ -1,0 +1,55 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_I_SERVICE_DISCOVERY_CLIENT_H
+#define SCORE_MW_COM_IMPL_I_SERVICE_DISCOVERY_CLIENT_H
+
+#include "score/mw/com/impl/enriched_instance_identifier.h"
+#include "score/mw/com/impl/find_service_handle.h"
+#include "score/mw/com/impl/find_service_handler.h"
+#include "score/mw/com/impl/handle_type.h"
+#include "score/mw/com/impl/i_service_discovery.h"
+#include "score/mw/com/impl/instance_identifier.h"
+
+#include "score/result/result.h"
+
+namespace score::mw::com::impl
+{
+
+class IServiceDiscoveryClient
+{
+  public:
+    virtual ~IServiceDiscoveryClient() noexcept = default;
+    IServiceDiscoveryClient() = default;
+
+    [[nodiscard]] virtual Result<void> OfferService(const InstanceIdentifier instance_identifier) = 0;
+    [[nodiscard]] virtual Result<void> StopOfferService(
+        const InstanceIdentifier instance_identifier,
+        const IServiceDiscovery::QualityTypeSelector quality_type_selector) = 0;
+    [[nodiscard]] virtual Result<void> StartFindService(
+        const FindServiceHandle find_service_handle,
+        FindServiceHandler<HandleType> handler,
+        const EnrichedInstanceIdentifier enriched_instance_identifier) = 0;
+    [[nodiscard]] virtual Result<void> StopFindService(const FindServiceHandle find_service_handle) = 0;
+    [[nodiscard]] virtual Result<ServiceHandleContainer<HandleType>> FindService(
+        const EnrichedInstanceIdentifier enriched_instance_identifier) = 0;
+
+  protected:
+    IServiceDiscoveryClient(const IServiceDiscoveryClient&) = default;
+    IServiceDiscoveryClient& operator=(const IServiceDiscoveryClient&) = default;
+    IServiceDiscoveryClient(IServiceDiscoveryClient&&) noexcept = default;
+    IServiceDiscoveryClient& operator=(IServiceDiscoveryClient&&) noexcept = default;
+};
+
+}  // namespace score::mw::com::impl
+
+#endif  // SCORE_MW_COM_IMPL_I_SERVICE_DISCOVERY_CLIENT_H

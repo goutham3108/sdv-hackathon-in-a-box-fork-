@@ -1,0 +1,1149 @@
+{
+  "serviceTypes": [
+    {
+      "serviceTypeName": "/carwindow/WindowControl",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "bindings": [
+        {
+          "binding": "SHM",
+          "serviceId": 6433,
+          "events": [
+            {
+              "eventName": "window_control",
+              "eventId": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "serviceTypeName": "/carwindow/WindowInfo",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "bindings": [
+        {
+          "binding": "SHM",
+          "serviceId": 6432,
+          "events": [
+            {
+              "eventName": "window_info",
+              "eventId": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "serviceTypeName": "/benchmark/EchoRequest",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "bindings": [
+        {
+          "binding": "SHM",
+          "serviceId": 7000,
+          "events": [
+            {
+              "eventName": "echo_request_tiny",
+              "eventId": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "serviceTypeName": "/benchmark/EchoResponse",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "bindings": [
+        {
+          "binding": "SHM",
+          "serviceId": 7001,
+          "events": [
+            {
+              "eventName": "echo_response_tiny",
+              "eventId": 0
+            },
+            {
+              "eventName": "echo_response_small",
+              "eventId": 1
+            },
+            {
+              "eventName": "echo_response_medium",
+              "eventId": 2
+            },
+            {
+              "eventName": "echo_response_large",
+              "eventId": 3
+            },
+            {
+              "eventName": "echo_response_xlarge",
+              "eventId": 4
+            },
+            {
+              "eventName": "echo_response_xxlarge",
+              "eventId": 5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "serviceTypeName": "/body_control_module_tx",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "bindings": [
+        {
+          "binding": "SHM",
+          "serviceId": 17152,
+          "events": [
+            {
+              "eventName": "high_beam_state",
+              "eventId": 2115
+            },
+            {
+              "eventName": "horn_state",
+              "eventId": 2119
+            },
+            {
+              "eventName": "high_beam_switch_state",
+              "eventId": 2121
+            },
+            {
+              "eventName": "parking_lights_state",
+              "eventId": 2123
+            },
+            {
+              "eventName": "running_lights_state",
+              "eventId": 2125
+            },
+            {
+              "eventName": "front_fog_lights_state",
+              "eventId": 2127
+            },
+            {
+              "eventName": "rear_fog_lights_state",
+              "eventId": 2129
+            },
+            {
+              "eventName": "hazard_lights_state",
+              "eventId": 2131
+            },
+            {
+              "eventName": "left_indicator_state",
+              "eventId": 2133
+            },
+            {
+              "eventName": "right_indicator_state",
+              "eventId": 2135
+            },
+            {
+              "eventName": "brake_lights_state",
+              "eventId": 2137
+            },
+            {
+              "eventName": "hood_open_state",
+              "eventId": 2139
+            },
+            {
+              "eventName": "rear_trunk_open_state",
+              "eventId": 2141
+            },
+            {
+              "eventName": "rear_trunk_locked_state",
+              "eventId": 2143
+            },
+            {
+              "eventName": "rear_trunk_position_state",
+              "eventId": 2145
+            },
+            {
+              "eventName": "driver_mirror_folded_state",
+              "eventId": 2147
+            },
+            {
+              "eventName": "passenger_mirror_folded_state",
+              "eventId": 2149
+            },
+            {
+              "eventName": "driver_mirror_heating_state",
+              "eventId": 2151
+            },
+            {
+              "eventName": "passenger_mirror_heating_state",
+              "eventId": 2153
+            },
+            {
+              "eventName": "front_wiping_mode_state",
+              "eventId": 2155
+            },
+            {
+              "eventName": "front_wiping_intensity_state",
+              "eventId": 2157
+            },
+            {
+              "eventName": "front_washer_fluid_level_state",
+              "eventId": 2159
+            },
+            {
+              "eventName": "front_washer_fluid_low_state",
+              "eventId": 2161
+            },
+            {
+              "eventName": "rain_intensity_state",
+              "eventId": 2163
+            },
+            {
+              "eventName": "front_windshield_heating_state",
+              "eventId": 2165
+            },
+            {
+              "eventName": "rear_windshield_heating_state",
+              "eventId": 2167
+            },
+            {
+              "eventName": "row1_driver_door_locked_state",
+              "eventId": 2169
+            },
+            {
+              "eventName": "row1_driver_door_open_state",
+              "eventId": 2171
+            },
+            {
+              "eventName": "row1_driver_window_position_state",
+              "eventId": 2173
+            },
+            {
+              "eventName": "row1_driver_child_lock_state",
+              "eventId": 2175
+            },
+            {
+              "eventName": "row1_passenger_door_locked_state",
+              "eventId": 2177
+            },
+            {
+              "eventName": "row1_passenger_door_open_state",
+              "eventId": 2179
+            },
+            {
+              "eventName": "row1_passenger_window_position_state",
+              "eventId": 2181
+            },
+            {
+              "eventName": "row2_driver_door_locked_state",
+              "eventId": 2183
+            },
+            {
+              "eventName": "row2_driver_door_open_state",
+              "eventId": 2185
+            },
+            {
+              "eventName": "row2_passenger_door_locked_state",
+              "eventId": 2187
+            },
+            {
+              "eventName": "row2_passenger_door_open_state",
+              "eventId": 2189
+            },
+            {
+              "eventName": "engine_running_state",
+              "eventId": 2191
+            },
+            {
+              "eventName": "oil_temperature_state",
+              "eventId": 2193
+            },
+            {
+              "eventName": "cell_voltages_state",
+              "eventId": 2195
+            },
+            {
+              "eventName": "vertical_acceleration_state",
+              "eventId": 2197
+            },
+            {
+              "eventName": "brake_pedal_position_state",
+              "eventId": 2199
+            },
+            {
+              "eventName": "engine_stop_start_enabled_state",
+              "eventId": 2201
+            },
+            {
+              "eventName": "transmission_performance_mode_state",
+              "eventId": 2203
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "serviceTypeName": "/body_control_module_rx",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "bindings": [
+        {
+          "binding": "SHM",
+          "serviceId": 17152,
+          "events": [
+            {
+              "eventName": "high_beam_state",
+              "eventId": 2116
+            },
+            {
+              "eventName": "horn_state",
+              "eventId": 2120
+            },
+            {
+              "eventName": "high_beam_switch_state",
+              "eventId": 2122
+            },
+            {
+              "eventName": "parking_lights_state",
+              "eventId": 2124
+            },
+            {
+              "eventName": "running_lights_state",
+              "eventId": 2126
+            },
+            {
+              "eventName": "front_fog_lights_state",
+              "eventId": 2128
+            },
+            {
+              "eventName": "rear_fog_lights_state",
+              "eventId": 2130
+            },
+            {
+              "eventName": "hazard_lights_state",
+              "eventId": 2132
+            },
+            {
+              "eventName": "left_indicator_state",
+              "eventId": 2134
+            },
+            {
+              "eventName": "right_indicator_state",
+              "eventId": 2136
+            },
+            {
+              "eventName": "brake_lights_state",
+              "eventId": 2138
+            },
+            {
+              "eventName": "hood_open_state",
+              "eventId": 2140
+            },
+            {
+              "eventName": "rear_trunk_open_state",
+              "eventId": 2142
+            },
+            {
+              "eventName": "rear_trunk_locked_state",
+              "eventId": 2144
+            },
+            {
+              "eventName": "rear_trunk_position_state",
+              "eventId": 2146
+            },
+            {
+              "eventName": "driver_mirror_folded_state",
+              "eventId": 2148
+            },
+            {
+              "eventName": "passenger_mirror_folded_state",
+              "eventId": 2150
+            },
+            {
+              "eventName": "driver_mirror_heating_state",
+              "eventId": 2152
+            },
+            {
+              "eventName": "passenger_mirror_heating_state",
+              "eventId": 2154
+            },
+            {
+              "eventName": "front_wiping_mode_state",
+              "eventId": 2156
+            },
+            {
+              "eventName": "front_wiping_intensity_state",
+              "eventId": 2158
+            },
+            {
+              "eventName": "front_washer_fluid_level_state",
+              "eventId": 2160
+            },
+            {
+              "eventName": "front_washer_fluid_low_state",
+              "eventId": 2162
+            },
+            {
+              "eventName": "rain_intensity_state",
+              "eventId": 2164
+            },
+            {
+              "eventName": "front_windshield_heating_state",
+              "eventId": 2166
+            },
+            {
+              "eventName": "rear_windshield_heating_state",
+              "eventId": 2168
+            },
+            {
+              "eventName": "row1_driver_door_locked_state",
+              "eventId": 2170
+            },
+            {
+              "eventName": "row1_driver_door_open_state",
+              "eventId": 2172
+            },
+            {
+              "eventName": "row1_driver_window_position_state",
+              "eventId": 2174
+            },
+            {
+              "eventName": "row1_driver_child_lock_state",
+              "eventId": 2176
+            },
+            {
+              "eventName": "row1_passenger_door_locked_state",
+              "eventId": 2178
+            },
+            {
+              "eventName": "row1_passenger_door_open_state",
+              "eventId": 2180
+            },
+            {
+              "eventName": "row1_passenger_window_position_state",
+              "eventId": 2182
+            },
+            {
+              "eventName": "row2_driver_door_locked_state",
+              "eventId": 2184
+            },
+            {
+              "eventName": "row2_driver_door_open_state",
+              "eventId": 2186
+            },
+            {
+              "eventName": "row2_passenger_door_locked_state",
+              "eventId": 2188
+            },
+            {
+              "eventName": "row2_passenger_door_open_state",
+              "eventId": 2190
+            },
+            {
+              "eventName": "engine_running_state",
+              "eventId": 2192
+            },
+            {
+              "eventName": "oil_temperature_state",
+              "eventId": 2194
+            },
+            {
+              "eventName": "cell_voltages_state",
+              "eventId": 2196
+            },
+            {
+              "eventName": "vertical_acceleration_state",
+              "eventId": 2198
+            },
+            {
+              "eventName": "brake_pedal_position_state",
+              "eventId": 2200
+            },
+            {
+              "eventName": "engine_stop_start_enabled_state",
+              "eventId": 2202
+            },
+            {
+              "eventName": "transmission_performance_mode_state",
+              "eventId": 2204
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "serviceTypeName": "vehicle::VehicleDynamicsService",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "bindings": [
+        {
+          "binding": "SHM",
+          "serviceId": 6433,
+          "events": [
+            {
+              "eventName": "speed",
+              "eventId": 1
+            },
+            {
+              "eventName": "speedAck",
+              "eventId": 2
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "serviceInstances": [
+    {
+      "instanceSpecifier": "gatewayd/application_window_control",
+      "serviceTypeName": "/carwindow/WindowControl",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 1,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "window_control",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instanceSpecifier": "gatewayd/application_window_info",
+      "serviceTypeName": "/carwindow/WindowInfo",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 1000,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "window_info",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instanceSpecifier": "gatewayd/application_echo_request",
+      "serviceTypeName": "/benchmark/EchoRequest",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 0,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "echo_request_tiny"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instanceSpecifier": "benchmark/echo_response",
+      "serviceTypeName": "/benchmark/EchoResponse",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 0,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "echo_response_tiny",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "echo_response_small",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "echo_response_medium",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "echo_response_large",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "echo_response_xlarge",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "echo_response_xxlarge",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instanceSpecifier": "/body_control_module/local_tx",
+      "serviceTypeName": "/body_control_module_tx",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 4096,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "high_beam_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "horn_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "high_beam_switch_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "parking_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "running_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_fog_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_fog_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "hazard_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "left_indicator_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "right_indicator_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "brake_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "hood_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_trunk_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_trunk_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_trunk_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "driver_mirror_folded_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "passenger_mirror_folded_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "driver_mirror_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "passenger_mirror_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_wiping_mode_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_wiping_intensity_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_washer_fluid_level_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_washer_fluid_low_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rain_intensity_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_windshield_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_windshield_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_window_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_child_lock_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_passenger_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_passenger_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_passenger_window_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_driver_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_driver_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_passenger_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_passenger_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "engine_running_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "oil_temperature_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "cell_voltages_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "vertical_acceleration_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "brake_pedal_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "engine_stop_start_enabled_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "transmission_performance_mode_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instanceSpecifier": "/body_control_module/network_rx",
+      "serviceTypeName": "/body_control_module_rx",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 4097,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "high_beam_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "horn_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "high_beam_switch_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "parking_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "running_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_fog_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_fog_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "hazard_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "left_indicator_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "right_indicator_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "brake_lights_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "hood_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_trunk_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_trunk_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_trunk_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "driver_mirror_folded_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "passenger_mirror_folded_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "driver_mirror_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "passenger_mirror_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_wiping_mode_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_wiping_intensity_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_washer_fluid_level_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_washer_fluid_low_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rain_intensity_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "front_windshield_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "rear_windshield_heating_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_window_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_driver_child_lock_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_passenger_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_passenger_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row1_passenger_window_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_driver_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_driver_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_passenger_door_locked_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "row2_passenger_door_open_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "engine_running_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "oil_temperature_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "cell_voltages_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "vertical_acceleration_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "brake_pedal_position_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "engine_stop_start_enabled_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "transmission_performance_mode_state",
+              "numberOfSampleSlots": 10,
+              "maxSubscribers": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instanceSpecifier": "/Vehicle/Service1/Instance",
+      "serviceTypeName": "vehicle::VehicleDynamicsService",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 1,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "speed",
+              "numberOfSampleSlots": 30,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "speedAck",
+              "numberOfSampleSlots": 30,
+              "maxSubscribers": 3
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "instanceSpecifier": "/Vehicle/Service2/Instance",
+      "serviceTypeName": "vehicle::VehicleDynamicsService",
+      "version": {
+        "major": 1,
+        "minor": 0
+      },
+      "instances": [
+        {
+          "instanceId": 2,
+          "asil-level": "QM",
+          "binding": "SHM",
+          "events": [
+            {
+              "eventName": "speed",
+              "numberOfSampleSlots": 30,
+              "maxSubscribers": 3
+            },
+            {
+              "eventName": "speedAck",
+              "numberOfSampleSlots": 30,
+              "maxSubscribers": 3
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "global": {
+    "asil-level": "B"
+  }
+}

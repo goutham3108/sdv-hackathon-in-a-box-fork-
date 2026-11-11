@@ -1,0 +1,238 @@
+# *******************************************************************************
+# Copyright (c) 2025 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("//score/mw:common_features.bzl", "COMPILER_WARNING_FEATURES")
+
+cc_library(
+    name = "proxy_event_test_resources",
+    testonly = True,
+    srcs = ["proxy_event_test_resources.cpp"],
+    hdrs = ["proxy_event_test_resources.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+    deps = [
+        "//score/memory/shared:shared_memory_factory_mock",
+        "//score/mw/com/impl:runtime",
+        "//score/mw/com/impl:runtime_mock",
+        "//score/mw/com/impl:service_discovery_mock",
+        "//score/mw/com/impl/bindings/lola:event",
+        "//score/mw/com/impl/bindings/lola:proxy",
+        "//score/mw/com/impl/bindings/lola/messaging:message_passing_service_mock",
+        "//score/mw/com/impl/bindings/lola/test_doubles",
+        "//score/mw/com/impl/test:runtime_mock_guard",
+        "@googletest//:gtest_main",
+        "@score_baselibs//score/filesystem:mock",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/os/mocklib:fcntl_mock",
+        "@score_baselibs//score/os/mocklib:unistd_mock",
+    ],
+)
+
+# Shared LolaProxyEventFixture and test helpers (ProxyTestAttorney, CallbackCountingReceiver, GetSamplePtrValue,
+# FromMockFunction) used by the various proxy_event_*_test.cpp files in //score/mw/com/impl/bindings/lola.
+cc_library(
+    name = "proxy_event_fixture",
+    testonly = True,
+    hdrs = ["proxy_event_fixture.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = ["//score/mw/com/impl/bindings/lola:__pkg__"],
+    deps = [
+        ":proxy_event_test_resources",
+        "//score/mw/com/impl:sample_reference_tracker",
+        "//score/mw/com/impl:subscription_state",
+        "//score/mw/com/impl/bindings/lola:proxy",
+        "@googletest//:gtest_main",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/language/safecpp/scoped_function:scope",
+    ],
+)
+
+cc_library(
+    name = "skeleton_test_resources",
+    testonly = True,
+    srcs = ["skeleton_test_resources.cpp"],
+    hdrs = ["skeleton_test_resources.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = [
+        "//score/mw/com/impl:__subpackages__",
+    ],
+    deps = [
+        "//score/memory/shared:shared_memory_factory_mock",
+        "//score/memory/shared:shared_memory_resource_heap_allocator_mock",
+        "//score/memory/shared:shared_memory_resource_mock",
+        "//score/mw/com/impl:runtime_mock",
+        "//score/mw/com/impl/bindings/lola:partial_restart_path_builder_mock",
+        "//score/mw/com/impl/bindings/lola:runtime_mock",
+        "//score/mw/com/impl/bindings/lola:shm_path_builder_mock",
+        "//score/mw/com/impl/bindings/lola:skeleton",
+        "//score/mw/com/impl/bindings/lola/messaging:message_passing_service_mock",
+        "//score/mw/com/impl/bindings/mock_binding/tracing:tracing_runtime",
+        "//score/mw/com/impl/configuration",
+        "//score/mw/com/impl/tracing:tracing_runtime_mock",
+        "@googletest//:gtest_main",
+        "@score_baselibs//score/filesystem:mock",
+        "@score_baselibs//score/language/futurecpp",
+        "@score_baselibs//score/os/mocklib:fcntl_mock",
+        "@score_baselibs//score/os/mocklib:unistd_mock",
+    ],
+)
+
+cc_library(
+    name = "skeleton_event_test_resources",
+    testonly = True,
+    srcs = ["skeleton_event_test_resources.cpp"],
+    hdrs = ["skeleton_event_test_resources.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = [
+        "//score/mw/com/impl/bindings/lola:__subpackages__",
+    ],
+    deps = [
+        ":skeleton_test_resources",
+        ":transaction_log_test_resources",
+        "//score/mw/com/impl:service_discovery_mock",
+        "//score/mw/com/impl/bindings/lola:event",
+        "//score/mw/com/impl/bindings/lola/messaging:message_passing_service_mock",
+        "//score/mw/com/impl/bindings/mock_binding:mock_binding_lib",
+        "@googletest//:gtest_main",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "service_discovery_test_resources",
+    testonly = True,
+    srcs = ["service_discovery_test_resources.cpp"],
+    hdrs = ["service_discovery_test_resources.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = ["//score/mw/com/impl:__subpackages__"],
+    deps = [
+        ":skeleton_test_resources",
+        "//score/mw/com/impl:find_service_handle",
+        "//score/mw/com/impl:find_service_handler",
+        "//score/mw/com/impl:handle_type",
+        "@googletest//:gtest",
+        "@score_baselibs//score/filesystem",
+        "@score_baselibs//score/language/futurecpp",
+    ],
+)
+
+cc_library(
+    name = "transaction_log_test_resources",
+    testonly = True,
+    srcs = ["transaction_log_test_resources.cpp"],
+    hdrs = ["transaction_log_test_resources.h"],
+    features = COMPILER_WARNING_FEATURES,
+    visibility = [
+        "//score/mw/com/impl/bindings/lola:__subpackages__",
+    ],
+    deps = [
+        ":proxy_event_test_resources",
+        "//score/mw/com/impl/bindings/lola:transaction_log",
+        "//score/mw/com/impl/bindings/lola:transaction_log_id",
+        "//score/mw/com/impl/bindings/lola:transaction_log_rollback_executor",
+        "//score/mw/com/impl/bindings/lola:transaction_log_set",
+        "@googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "skeleton_component_test",
+    size = "small",
+    timeout = "long",
+    srcs = ["skeleton_component_test.cpp"],
+    features = COMPILER_WARNING_FEATURES + [
+        "aborts_upon_exception",
+    ],
+    tags = [
+        "exclusive",  # Sandboxing is not properly working with LoLa message passing 2.0 (Ticket-217341)
+        "unit",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # @todo: This should also work under QNX, convert to integration test
+    visibility = [
+        "//score/mw/com/impl/bindings/lola:__subpackages__",
+    ],
+    deps = [
+        ":skeleton_test_resources",
+        "//score/mw/com/impl:runtime",
+        "//score/mw/com/impl/bindings/lola:service_data_control",
+        "//score/mw/com/impl/bindings/lola:service_data_storage",
+        "//score/mw/com/impl/bindings/mock_binding:mock_binding_lib",
+        "@googletest//:gtest_main",
+        "@score_baselibs//score/language/safecpp/coverage_termination_handler",
+        "@score_baselibs//score/os/mocklib:acl_mock",
+        "@score_baselibs//score/os/mocklib:fcntl_mock",
+    ],
+)
+
+cc_test(
+    name = "skeleton_event_component_test",
+    size = "small",
+    timeout = "long",
+    srcs = ["skeleton_event_component_test.cpp"],
+    features = COMPILER_WARNING_FEATURES + [
+        "aborts_upon_exception",
+    ],
+    tags = [
+        "exclusive",  # Sandboxing is not properly working with LoLa message passing 2.0 (Ticket-217341)
+        "unit",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # @todo: This should also work under QNX, convert to integration test
+    visibility = [
+        "//score/mw/com/impl/bindings/lola:__subpackages__",
+    ],
+    deps = [
+        ":skeleton_test_resources",
+        "//score/mw/com/impl:runtime_mock",
+        "//score/mw/com/impl:service_discovery_mock",
+        "//score/mw/com/impl/bindings/lola:runtime_mock",
+        "//score/mw/com/impl/bindings/lola:skeleton",
+        "//score/mw/com/impl/bindings/lola/messaging:message_passing_service_mock",
+        "//score/mw/com/impl/bindings/mock_binding/tracing:tracing_runtime",
+        "//score/mw/com/impl/test:runtime_mock_guard",
+        "//score/mw/com/impl/tracing:tracing_runtime_mock",
+        "@googletest//:gtest_main",
+        "@score_baselibs//score/filesystem",
+        "@score_baselibs//score/language/safecpp/coverage_termination_handler",
+        "@score_baselibs//score/os/mocklib:fcntl_mock",
+    ],
+)
+
+cc_test(
+    name = "proxy_component_test",
+    size = "small",
+    timeout = "moderate",
+    srcs = ["proxy_component_test.cpp"],
+    features = COMPILER_WARNING_FEATURES + ["aborts_upon_exception"],
+    tags = [
+        "exclusive",  # Sandboxing is not properly working with LoLa message passing 2.0 (Ticket-217341)
+        "unit",
+    ],
+    target_compatible_with = ["@platforms//os:linux"],  # @todo: This should also work under QNX, convert to integration test
+    visibility = [
+        "//score/mw/com/impl/bindings/lola:__subpackages__",
+    ],
+    deps = [
+        ":proxy_event_test_resources",
+        ":service_discovery_test_resources",
+        "//score/mw/com/impl:proxy_base",
+        "//score/mw/com/impl/bindings/lola:proxy",
+        "//score/mw/com/impl/bindings/lola:runtime_mock",
+        "//score/mw/com/impl/bindings/lola/service_discovery/client:service_discovery_client",
+        "//score/mw/com/impl/bindings/lola/test_doubles",
+        "//score/mw/com/impl/configuration/test:configuration_store",
+        "@googletest//:gtest_main",
+        "@score_baselibs//score/filesystem",
+        "@score_baselibs//score/language/safecpp/coverage_termination_handler",
+    ],
+)

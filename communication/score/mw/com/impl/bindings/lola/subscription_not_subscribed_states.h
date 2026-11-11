@@ -1,0 +1,54 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_BINDINGS_LOLA_SUBSCRIPTION_NOT_SUBSCRIBED_STATES_H
+#define SCORE_MW_COM_IMPL_BINDINGS_LOLA_SUBSCRIPTION_NOT_SUBSCRIBED_STATES_H
+
+#include "score/mw/com/impl/bindings/lola/subscription_state_base.h"
+#include "score/mw/com/impl/scoped_event_receive_handler.h"
+
+#include <cstddef>
+#include <optional>
+
+namespace score::mw::com::impl::lola
+{
+
+class NotSubscribedState final : public SubscriptionStateBase
+{
+  public:
+    // Inherit parent class constructor
+    using SubscriptionStateBase::SubscriptionStateBase;
+
+    NotSubscribedState(const NotSubscribedState&) = delete;
+    NotSubscribedState(NotSubscribedState&&) = delete;
+    NotSubscribedState& operator=(const NotSubscribedState&) & = delete;
+    NotSubscribedState& operator=(NotSubscribedState&&) & = delete;
+
+    ~NotSubscribedState() noexcept override = default;
+
+    Result<void> SubscribeEvent(const std::size_t max_sample_count) override;
+    void UnsubscribeEvent() noexcept override;
+    void StopOfferEvent() noexcept override;
+    void ReOfferEvent(const pid_t new_event_source_pid) noexcept override;
+
+    void SetReceiveHandler(std::weak_ptr<ScopedEventReceiveHandler> handler) noexcept override;
+    void UnsetReceiveHandler() override;
+    std::optional<std::uint16_t> GetMaxSampleCount() const noexcept override;
+    std::optional<SlotCollector>& GetSlotCollector() & noexcept override;
+    const std::optional<SlotCollector>& GetSlotCollector() const& noexcept override;
+
+    void OnEntry() override;
+};
+
+}  // namespace score::mw::com::impl::lola
+
+#endif  // SCORE_MW_COM_IMPL_BINDINGS_LOLA_SUBSCRIPTION_NOT_SUBSCRIBED_STATES_H

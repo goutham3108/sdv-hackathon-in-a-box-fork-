@@ -1,0 +1,41 @@
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@score_someip_gateway//bazel/tools:someip_config.bzl", "generate_someip_config_bin")
+
+exports_files(["signal_routes.json"])
+
+cc_library(
+    name = "high_beam_udp_protocol",
+    hdrs = ["include/high_beam_udp_protocol.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "high_beam_udp_protocol_test",
+    srcs = ["include/high_beam_udp_protocol_test.cpp"],
+    deps = [":high_beam_udp_protocol"],
+)
+
+# Gateway configuration for this demo. Built here so inc_someip_gateway stays unmodified.
+generate_someip_config_bin(
+    name = "gateway_config",
+    json = "config/mw_someip_config.json",
+    output = "mw_someip_config.bin",
+    visibility = ["//visibility:public"],
+)
+
+cc_library(
+	name = "speed_payload",
+	hdrs = ["include/speed_payload.h"],
+	visibility = ["//visibility:public"],
+)
+
+cc_test(
+	name = "speed_payload_test",
+	srcs = ["include/speed_payload_test.cpp"],
+	deps = [":speed_payload"],
+)

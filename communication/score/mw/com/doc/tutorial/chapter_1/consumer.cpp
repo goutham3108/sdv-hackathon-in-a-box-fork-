@@ -1,0 +1,106 @@
+/********************************************************************************
+ * Copyright (c) 2026 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/doc/tutorial/chapter_1/hello_world_service.h"
+#include "score/mw/com/types.h"
+
+#include <atomic>
+#include <csignal>
+#include <cstdio>
+#include <cstring>
+
+namespace
+{
+std::atomic<bool> g_running{true};
+
+void SignalHandler(int /*signum*/)
+{
+    std::cout << "HelloWorld service consumer caught signal." << std::endl;
+    g_running.store(false, std::memory_order_relaxed);
+}
+}  // namespace
+
+// [hello-world-proxy-alias-start]
+using HelloWorldProxy = score::mw::com::AsProxy<score::mw::com::tutorial::HelloWorldInterface>;
+// [hello-world-proxy-alias-end]
+
+int main()
+{
+    std::signal(SIGINT, SignalHandler);
+    std::signal(SIGTERM, SignalHandler);
+
+    auto instance_specifier = score::mw::com::InstanceSpecifier::Create(std::string{"MyHelloWorldServiceInstance"});
+    SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(instance_specifier.has_value(), "Failed to create InstanceSpecifier!");
+
+    std::optional<HelloWorldProxy::HandleType> service_handle{};
+    while (g_running.load(std::memory_order_relaxed))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // [hello-world-find-service-start]
+        auto service_handle_container_result = HelloWorldProxy::FindService(instance_specifier.value());
+        // [hello-world-find-service-end]
+        SCORE_LANGUAGE_FUTURECPP_ASSERT_PRD_MESSAGE(service_handle_container_result.has_value(),
+                                                    "HelloWorldProxy::FindService failed!");
+        if (service_handle_container_result.value().empty())
+        {
+            std::cout << "No HelloWorld service instance found yet. Retrying..." << std::endl;
+        }
+        else
+        {
+            std::cout << "HelloWorld service instance found." << std::endl;
+            service_handle = service_handle_container_result.value()[0];
+            break;
+        }
+    }
+
+    // [hello-world-proxy-create-start]
+    auto proxy_result = HelloWorldProxy::Create(service_handle.value());
+    // [hello-world-proxy-create-end]
+    if (!proxy_result)
+    {
+        std::cerr << "Failed to create HelloWorldProxy: " << proxy_result.error() << std::endl;
+        exit(1);
+    }
+
+    // [hello-world-proxy-instance-start]
+    auto hello_world_proxy = std::move(proxy_result).value();
+    // [hello-world-proxy-instance-end]
+    // [hello-world-subscribe-start]
+    const auto subscribe_result = hello_world_proxy.message.Subscribe(1);
+    // [hello-world-subscribe-end]
+    if (!subscribe_result)
+    {
+        std::cerr << "Failed to subscribe to HelloWorldService instance 'message' event: " << subscribe_result.error()
+                  << std::endl;
+        exit(1);
+    }
+
+    size_t receive_counter{0};
+    while (g_running.load(std::memory_order_relaxed))
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        // [hello-world-get-new-samples-start]
+        auto get_new_samples_result = hello_world_proxy.message.GetNewSamples(
+            [&receive_counter](auto&& sample) {
+                const auto* buf = sample.Get()->data();
+                std::cout << "Sample received. Event \"message\" update received: " << buf << std::endl;
+                ++receive_counter;
+            },
+            1);
+        // [hello-world-get-new-samples-end]
+        if (!get_new_samples_result)
+        {
+            std::cerr << "Failed to get new samples: " << get_new_samples_result.error() << std::endl;
+        }
+    }
+    std::cout << "HelloWorld service consumer going down." << std::endl;
+}

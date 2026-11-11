@@ -1,0 +1,82 @@
+<mxfile host="app.diagrams.net" agent="Microsoft Copilot">
+  <diagram id="system-block" name="Page-1">
+    <mxGraphModel dx="1516" dy="773" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=28;fontStyle=1;" value="System Block Diagram" vertex="1">
+          <mxGeometry height="40" width="400" x="465" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" parent="1" style="text;html=1;align=center;verticalAlign=middle;fontSize=20;" value="SDV Runtime Environment with QEMU (SCORE Middleware) and MATLAB Simulation" vertex="1">
+          <mxGeometry height="35" width="930" x="155" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sdv" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe8ff;strokeColor=#0b69b7;strokeWidth=2;fontSize=22;fontStyle=1;verticalAlign=top;spacingTop=12;" value="SDV Runtime Environment&lt;br&gt;(Microsoft Project)" vertex="1">
+          <mxGeometry height="425" width="440" x="15" y="305" as="geometry" />
+        </mxCell>
+        <mxCell id="scenario" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe8ff;strokeColor=#125b91;strokeWidth=2;fontSize=17;" value="&lt;b&gt;Scenario / Test Management&lt;/b&gt;&lt;br&gt;(Build, Deploy, Run, Monitor)" vertex="1">
+          <mxGeometry height="85" width="390" x="40" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="runtime" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe8ff;strokeColor=#125b91;strokeWidth=2;fontSize=17;" value="&lt;b&gt;SDV Runtime Services&lt;/b&gt;&lt;br&gt;(Orchestration, Logging, Data Mgmt)" vertex="1">
+          <mxGeometry height="85" width="390" x="40" y="505" as="geometry" />
+        </mxCell>
+        <mxCell id="host" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#cfe8ff;strokeColor=#125b91;strokeWidth=2;fontSize=17;" value="&lt;b&gt;Host Interface / APIs&lt;/b&gt;&lt;br&gt;(Control, Monitoring, Data Exchange)" vertex="1">
+          <mxGeometry height="85" width="390" x="40" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="qemu" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcf5dc;strokeColor=#087b28;strokeWidth=2;fontSize=22;fontStyle=1;verticalAlign=top;spacingTop=12;" value="QEMU System&lt;br&gt;(Virtualized Target Environment)" vertex="1">
+          <mxGeometry height="405" width="625" x="575" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="guest" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcf5dc;strokeColor=#14833b;strokeWidth=2;fontSize=18;fontStyle=1;verticalAlign=top;spacingTop=12;" value="Guest OS (e.g., Linux)" vertex="1">
+          <mxGeometry height="205" width="575" x="600" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="score" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e7d8f5;strokeColor=#8247a8;strokeWidth=2;fontSize=17;" value="&lt;b&gt;SCORE Middleware&lt;/b&gt;&lt;br&gt;(Communication, Services,&lt;br&gt;Scheduling, etc.)" vertex="1">
+          <mxGeometry height="120" width="265" x="615" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="apps" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd6d6;strokeColor=#cc5d5d;strokeWidth=2;fontSize=17;" value="&lt;b&gt;Application(s)&lt;/b&gt;&lt;br&gt;(Vehicle Functions,&lt;br&gt;Test Components, etc.)" vertex="1">
+          <mxGeometry height="120" width="215" x="940" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="hw" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1e1e1;strokeColor=#666666;strokeWidth=2;fontSize=18;" value="&lt;b&gt;QEMU Virtual Hardware&lt;/b&gt;&lt;br&gt;(CPU, Memory, Network, Peripherals, etc.)" vertex="1">
+          <mxGeometry height="85" width="575" x="600" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="matlab" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe2bf;strokeColor=#f28b00;strokeWidth=2;fontSize=22;fontStyle=1;verticalAlign=top;spacingTop=12;" value="MATLAB Simulation" vertex="1">
+          <mxGeometry height="170" width="625" x="575" y="575" as="geometry" />
+        </mxCell>
+        <mxCell id="model" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff0bf;strokeColor=#f0a000;strokeWidth=2;fontSize=16;" value="&lt;b&gt;Vehicle / Environment Model&lt;/b&gt;&lt;br&gt;(Plant, Sensors, Actuators,&lt;br&gt;Environment, etc.)" vertex="1">
+          <mxGeometry height="100" width="290" x="595" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="simctl" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff0bf;strokeColor=#f0a000;strokeWidth=2;fontSize=16;" value="&lt;b&gt;Simulation Control&lt;/b&gt;&lt;br&gt;(Scenarios, Stimuli,&lt;br&gt;Data Logging, Analysis)" vertex="1">
+          <mxGeometry height="100" width="280" x="900" y="630" as="geometry" />
+        </mxCell>
+        <mxCell id="controlLbl" parent="1" style="text;html=1;align=center;fontSize=14;" value="Control / Data&lt;br&gt;(Host ↔ QEMU)" vertex="1">
+          <mxGeometry height="45" width="120" x="455" y="383" as="geometry" />
+        </mxCell>
+        <mxCell id="simLbl" parent="1" style="text;html=1;align=left;fontSize=14;" value="&lt;b&gt;Simulation I/O&lt;/b&gt;&lt;br&gt;(e.g., Sensor Data, Vehicle Dynamics) UDP packets" vertex="1">
+          <mxGeometry height="55" width="350" x="900" y="510" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="scenario" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;startArrow=block;startFill=1;strokeWidth=2;" target="runtime">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;startArrow=block;startFill=1;strokeWidth=2;" target="host">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="score" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;startArrow=block;startFill=1;strokeWidth=2;" target="apps">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="score" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;startArrow=block;startFill=1;strokeWidth=2;" target="hw">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="hw" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=block;endFill=1;startArrow=block;startFill=1;strokeWidth=2;" target="matlab">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9JP7GsOoeIhwg6dFHA9u-1" edge="1" parent="1" source="qemu" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.994;entryY=0.533;entryDx=0;entryDy=0;entryPerimeter=0;fontFamily=Helvetica;fontSize=12;fontColor=default;defaultLabelBackgroundColor=page;" target="sdv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="9JP7GsOoeIhwg6dFHA9u-2" parent="1" style="ellipse;shape=cloud;whiteSpace=wrap;html=1;perimeter=cloudPerimeter;" value="Microsoft&amp;nbsp; Digital Auto" vertex="1">
+          <mxGeometry height="125" width="190" x="60" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="9JP7GsOoeIhwg6dFHA9u-4" edge="1" parent="1" source="9JP7GsOoeIhwg6dFHA9u-2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.55;exitY=0.95;exitDx=0;exitDy=0;exitPerimeter=0;entryX=0.416;entryY=0.01;entryDx=0;entryDy=0;entryPerimeter=0;fontFamily=Helvetica;fontSize=12;fontColor=default;defaultLabelBackgroundColor=page;flowAnimation=1;endArrow=classic;endFill=1;startArrow=classic;startFill=1;" target="sdv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

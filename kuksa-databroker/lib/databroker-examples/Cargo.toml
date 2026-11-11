@@ -1,0 +1,14 @@
+[package]
+name = "databroker-examples"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+databroker-proto = { workspace = true }
+kuksa-common = { path = "../common" }
+kuksa_val_v2 = { path = "../kuksa_val_v2" }
+kuksa = { path = "../kuksa" }
+tokio = { version = "1.17.0", features = ["full"] }
+tokio-stream = "0.1.8"
+tonic = { workspace = true, features = ["transport", "channel"] }
+prost-types = "0.14"

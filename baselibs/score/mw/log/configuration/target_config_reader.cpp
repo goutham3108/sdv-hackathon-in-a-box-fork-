@@ -1,0 +1,518 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/log/configuration/target_config_reader.h"
+
+#include "score/callback.hpp"
+#include "score/json/json_parser.h"
+#include "score/memory/split_string_view.h"
+#include "score/mw/log/detail/error.h"
+#include "score/mw/log/detail/initialization_reporter.h"
+
+#include <functional>
+
+namespace score
+{
+namespace mw
+{
+namespace log
+{
+namespace detail
+{
+
+namespace
+{
+
+constexpr std::string_view kEcuIdKey{"ecuId"};
+constexpr std::string_view kAppIdKey{"appId"};
+constexpr std::string_view kAppDescriptionKey{"appDesc"};
+constexpr std::string_view kLogFilePathKey{"logFilePath"};
+constexpr std::string_view kLogModeKey{"logMode"};
+constexpr std::string_view kLogLevelKey{"logLevel"};
+constexpr std::string_view kLogLevelThresholdConsoleKey{"logLevelThresholdConsole"};
+constexpr std::string_view kContextConfigsKey{"contextConfigs"};
+constexpr std::string_view kContextNameKey{"name"};
+constexpr std::string_view kStackBufferSizeKey{"stackBufferSize"};
+constexpr std::string_view kRingBufferSizeKey{"ringBufferSize"};
+constexpr std::string_view kOverwriteOnFullKey{"overwriteOnFull"};
+constexpr std::string_view kNumberOfSlotsKey{"numberOfSlots"};
+constexpr std::string_view kSlotSizeBytesKey{"slotSizeBytes"};
+constexpr std::string_view kDatarouterUidKey{"datarouterUid"};
+constexpr std::string_view kDynamicDatarouterIdentifiersKey{"dynamicDatarouterIdentifiers"};
+
+// Suppress Coverity warning because:
+// 1. 'constexpr' cannot be used with std::unordered_map.
+// 2. Defining it as a local variable does not resolve the Coverity warning.
+// 3. Converting to `if-else` statements would introduce complexity and trigger complexity warnings.
+// coverity[autosar_cpp14_a3_3_2_violation]
+const std::unordered_map<std::string_view, LogLevel> kStringToLogLevel{{{"kOff", LogLevel::kOff},
+                                                                        {"kFatal", LogLevel::kFatal},
+                                                                        {"kError", LogLevel::kError},
+                                                                        {"kWarn", LogLevel::kWarn},
+                                                                        {"kWarning", LogLevel::kWarn},
+                                                                        {"kInfo", LogLevel::kInfo},
+                                                                        {"kDebug", LogLevel::kDebug},
+                                                                        {"kVerbose", LogLevel::kVerbose}}};
+
+constexpr std::string::value_type kLogModeCombineChar = '|';
+
+// coverity[autosar_cpp14_a3_3_2_violation]
+const std::unordered_map<std::string_view, LogMode> kStringToLogMode{{{"kRemote", LogMode::kRemote},
+                                                                      {"kConsole", LogMode::kConsole},
+                                                                      {"kFile", LogMode::kFile},
+                                                                      {"kSystem", LogMode::kSystem},
+                                                                      {"kCustom", LogMode::kCustom}}};
+
+/// \brief Provide user feedback in case a configuration file contains errors.
+template <typename T>
+void ReportOnError(score::Result<T> result, const std::string& file_name) noexcept
+{
+    if (result.has_value() == true)
+    {
+        return;
+    }
+
+    ReportInitializationError(result.error(), std::string_view{file_name.data(), file_name.size()});
+}
+
+// Forward declare GetElementAsImpl
+template <typename ResultType, typename AsType = ResultType>
+class GetElementAsImpl;
+
+template <typename ResultType, typename AsType = ResultType>
+auto GetElementAs(const score::json::Object& obj, const std::string_view key) noexcept
+{
+    // To prevent using function template specializations, we use class template specialization in the implementation of
+    // GetElementAs()
+    return GetElementAsImpl<ResultType, AsType>::GetElementAs(obj, key);
+}
+
+template <typename ResultType, typename AsType>
+class GetElementAsImpl
+{
+  public:
+    static score::Result<ResultType> GetElementAs(const score::json::Object& obj, const std::string_view key) noexcept
+    {
+        const auto find_result = obj.find(key);
+        if (find_result == obj.end())
+        {
+            return score::MakeUnexpected(Error::kConfigurationOptionalJsonKeyNotFound, "key not found");
+        }
+
+        return find_result->second.As<AsType>();
+    }
+};
+
+template <typename T>
+score::Result<std::reference_wrapper<const T>> GetElementAsRef(const score::json::Object& obj,
+                                                             const std::string_view key) noexcept
+{
+    return GetElementAs<std::reference_wrapper<const T>, T>(obj, key);
+}
+
+template <typename T>
+using GetElementCallback = score::cpp::callback<void(T)>;
+
+template <typename T>
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+// std::terminate() will not  implicitly be called from GetElementAndThen as it declared as noexcept.
+// coverity[autosar_cpp14_a15_5_3_violation]
+score::Result<void> GetElementAndThen(const score::json::Object& obj,
+                                    const std::string_view key,
+                                    GetElementCallback<T> update) noexcept
+{
+    const auto parser_result = GetElementAs<T>(obj, key);
+    if (parser_result.has_value() == false)
+    {
+        return score::MakeUnexpected<void>(parser_result.error());
+    }
+
+    update(parser_result.value());
+
+    return {};
+}
+
+score::Result<void> ParseEcuId(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::string_view>(
+        root,
+        kEcuIdKey,
+        [&config](auto value) noexcept { config.SetEcuId(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseAppId(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::string_view>(
+        root,
+        kAppIdKey,
+        [&config](auto value) noexcept { config.SetAppId(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseAppDescription(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::string_view>(
+        root,
+        kAppDescriptionKey,
+        [&config](auto value) noexcept { config.SetAppDescription(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseLogFilePath(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::string_view>(
+        root,
+        kLogFilePathKey,
+        [&config](auto value) noexcept { config.SetLogFilePath(value); }
+    );
+    // clang-format on
+}
+
+/// \brief Returns the corresponding log mode of the string.
+score::Result<LogMode> LogModeFromString(const std::string_view str) noexcept
+{
+    const auto result = kStringToLogMode.find(str);
+
+    if (result == kStringToLogMode.end())
+    {
+        return MakeUnexpected(Error::kInvalidLogModeString,
+                              "Expected `kRemote`, `kConsole`, `kSystem`, `kFile` or `kCustom`.");
+    }
+
+    return result->second;
+}
+
+/// \brief Returns the corresponding combined log mode(s) of the string.
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+// std::terminate() will not  implicitly be called from LogModesFromString as it declared as noexcept.
+// coverity[autosar_cpp14_a15_5_3_violation]
+score::Result<std::unordered_set<LogMode>> LogModesFromString(const std::string_view str) noexcept
+{
+    const auto segments = score::memory::LazySplitStringView{str, kLogModeCombineChar};
+
+    std::unordered_set<LogMode> result;
+
+    for (const auto segment : segments)
+    {
+        const auto log_mode = LogModeFromString(segment);
+        if (log_mode.has_value() == false)
+        {
+            return MakeUnexpected(Error::kInvalidLogModeString);
+        }
+        std::ignore = result.emplace(log_mode.value());
+    }
+    return result;
+}
+
+score::Result<void> ParseLogMode(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+    // std::terminate() will not  implicitly be called from GetElementAndThen as it declared as noexcept.
+    // coverity[autosar_cpp14_a15_5_3_violation]
+    return GetElementAndThen<std::string_view>(root, kLogModeKey, [&config](auto value) noexcept {
+        const auto log_mode_result = LogModesFromString(value);
+        if (log_mode_result.has_value())
+        {
+            config.SetLogMode(log_mode_result.value());  // LCOV_EXCL_BR_LINE: no branches here to be covered.
+        }
+    });
+}
+
+/// \brief Returns the corresponding log level of the string.
+score::Result<LogLevel> LogLevelFromString(const std::string_view str) noexcept
+{
+    const auto result = kStringToLogLevel.find(str);
+    if (result == kStringToLogLevel.end())
+    {
+        return MakeUnexpected(Error::kInvalidLogLevelString,
+                              "Expected `kOff`, `kFatal`, `kWarn`, `kError`, `kInfo`, `kDebug` or `kVerbose`.");
+    }
+    return result->second;
+}
+
+/// \brief Returns the element of a JSON object as a LogLevel.
+template <>
+class GetElementAsImpl<LogLevel>
+{
+  public:
+    // Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+    // std::terminate() will not  implicitly be called from GetElementAs as it declared as noexcept.
+    // coverity[autosar_cpp14_a15_5_3_violation]
+    static score::Result<LogLevel> GetElementAs(const score::json::Object& obj, const std::string_view key) noexcept
+    {
+        const auto string_result = GetElementAsImpl<std::string_view>::GetElementAs(obj, key);
+        if (string_result.has_value() == false)
+        {
+            return score::MakeUnexpected<LogLevel>(string_result.error());
+        }
+
+        return LogLevelFromString(string_result.value());
+    }
+};
+
+score::Result<void> ParseLogLevel(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+    // std::terminate() will not  implicitly be called from GetElementAndThen as it declared as noexcept.
+    // coverity[autosar_cpp14_a15_5_3_violation]
+    return GetElementAndThen<std::string_view>(root, kLogLevelKey, [&config](auto value) noexcept {
+        const auto log_level_result = LogLevelFromString(value);
+        if (log_level_result.has_value())
+        {
+            config.SetDefaultLogLevel(log_level_result.value());  // LCOV_EXCL_BR_LINE: no branches here to be covered.
+        }
+    });
+}
+
+score::Result<void> ParseLogLevelConsole(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+    // std::terminate() will not  implicitly be called from GetElementAndThen as it declared as noexcept.
+    // coverity[autosar_cpp14_a15_5_3_violation]
+    return GetElementAndThen<std::string_view>(root, kLogLevelThresholdConsoleKey, [&config](auto value) noexcept {
+        const auto log_level_result = LogLevelFromString(value);
+        if (log_level_result.has_value())
+        {
+            config.SetDefaultConsoleLogLevel(log_level_result.value());
+        }
+    });
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+// std::terminate() will not  implicitly be called from ParseContextLogLevel as it declared as noexcept
+// coverity[autosar_cpp14_a15_5_3_violation]
+score::Result<void> ParseContextLogLevel(const score::json::Object& root,
+                                       Configuration& config,
+                                       const std::string& path_for_reporting) noexcept
+{
+    const auto context_config = GetElementAsRef<score::json::List>(root, kContextConfigsKey);
+    if (context_config.has_value() == false)
+    {
+        return score::MakeUnexpected<void>(context_config.error());
+    }
+
+    auto context_config_map = config.GetContextLogLevel();
+
+    for (const auto& context_item : context_config.value().get())
+    {
+        const auto context_result = context_item.As<score::json::Object>();
+        if (context_result.has_value() == false)
+        {
+            ReportOnError(context_result, path_for_reporting);
+            continue;
+        }
+        const auto context_obj = context_result.value();
+
+        const auto context_name_result = GetElementAsRef<std::string>(context_obj, kContextNameKey);
+        if (context_name_result.has_value() == false)
+        {
+            ReportOnError(context_name_result, path_for_reporting);
+            continue;
+        }
+
+        const auto context_log_level_result = GetElementAs<LogLevel>(context_obj, kLogLevelKey);
+        if (context_log_level_result.has_value() == false)
+        {
+            ReportOnError(context_name_result, path_for_reporting);
+            continue;
+        }
+
+        context_config_map[LoggingIdentifier{context_name_result.value().get()}] = context_log_level_result.value();
+    }
+    config.SetContextLogLevel(context_config_map);
+
+    return {};
+}
+
+score::Result<void> ParseStackBufferSize(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::size_t>(
+        root,
+        kStackBufferSizeKey,
+        [&config](auto value) noexcept { config.SetStackBufferSize(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseRingBufferSize(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::size_t>(
+        root,
+        kRingBufferSizeKey,
+        [&config](auto value) noexcept { config.SetRingBufferSize(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseOverwriteOnFull(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<bool>(
+        root,
+        kOverwriteOnFullKey,
+        [&config](auto value) noexcept { config.SetRingBufferOverwriteOnFull(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseNumberOfSlots(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::size_t>(
+        root,
+        kNumberOfSlotsKey,
+        [&config](auto value) noexcept { config.SetNumberOfSlots(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseSlotSizeBytes(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::size_t>(
+        root,
+        kSlotSizeBytesKey,
+        [&config](auto value) noexcept { config.SetSlotSizeInBytes(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseDatarouterUid(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::size_t>(
+        root,
+        kDatarouterUidKey,
+        [&config](const auto value) noexcept { config.SetDataRouterUid(value); }
+    );
+    // clang-format on
+}
+
+score::Result<void> ParseDynamicDatarouterIdentifiers(const score::json::Object& root, Configuration& config) noexcept
+{
+    // Disabling clang-format to address Coverity warning: autosar_cpp14_a7_1_7_violation
+    // clang-format off
+    return GetElementAndThen<std::size_t>(
+        root,
+        kDynamicDatarouterIdentifiersKey,
+        [&config](const auto value) noexcept { config.SetDynamicDatarouterIdentifiers(static_cast<bool>(value)); }
+    );
+    // clang-format on
+}
+
+void ParseConfigurationElements(const score::json::Object& root, const std::string& path, Configuration& config) noexcept
+{
+    ReportOnError(ParseEcuId(root, config), path);
+    ReportOnError(ParseAppId(root, config), path);
+    ReportOnError(ParseAppDescription(root, config), path);
+    ReportOnError(ParseLogFilePath(root, config), path);
+    ReportOnError(ParseLogMode(root, config), path);
+    ReportOnError(ParseLogLevel(root, config), path);
+    ReportOnError(ParseLogLevelConsole(root, config), path);
+    ReportOnError(ParseContextLogLevel(root, config, path), path);
+    ReportOnError(ParseStackBufferSize(root, config), path);
+    ReportOnError(ParseRingBufferSize(root, config), path);
+    ReportOnError(ParseOverwriteOnFull(root, config), path);
+    ReportOnError(ParseNumberOfSlots(root, config), path);
+    ReportOnError(ParseSlotSizeBytes(root, config), path);
+    ReportOnError(ParseDatarouterUid(root, config), path);
+    ReportOnError(ParseDynamicDatarouterIdentifiers(root, config), path);
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+// std::terminate() will not  implicitly be called from ParseAndUpdateConfiguration as it declared as noexcept
+// coverity[autosar_cpp14_a15_5_3_violation]
+score::Result<Configuration> ParseAndUpdateConfiguration(const std::string& path, Configuration config) noexcept
+{
+    const score::json::JsonParser json_parser_obj;
+    // FromFile() is safe, if the JSON file is stored in stored on qtsafefs (integrity protection).
+    // See broken_link_c/item/13777082 and broken_link_c/issue/6576406
+    // NOLINTNEXTLINE(score-banned-function) - Argumentation is above.
+    const auto json_result = json_parser_obj.FromFile(path);
+    if (json_result.has_value() == false)
+    {
+        return score::MakeUnexpected<Configuration>(json_result.error());
+    }
+
+    const auto root_result = json_result.value().As<score::json::Object>();
+    if (root_result.has_value() == false)
+    {
+        return score::MakeUnexpected<Configuration>(root_result.error());
+    }
+
+    ParseConfigurationElements(root_result->get(), path, config);
+    return config;
+}
+
+}  // namespace
+
+TargetConfigReader::TargetConfigReader(std::unique_ptr<IConfigurationFileDiscoverer> discoverer) noexcept
+    : ITargetConfigReader{}, discoverer_(std::move(discoverer))
+{
+}
+
+// Suppress "AUTOSAR C++14 A15-5-3" rule findings: "The std::terminate() function shall not be called implicitly".
+// std::terminate() will not  implicitly be called from ReadConfig as it declared as noexcept
+// coverity[autosar_cpp14_a15_5_3_violation]
+score::Result<Configuration> TargetConfigReader::ReadConfig() const noexcept
+{
+    const auto config_files = discoverer_->FindConfigurationFiles();
+
+    if (config_files.empty())
+    {
+        return MakeUnexpected(Error::kConfigurationFilesNotFound);
+    }
+
+    Configuration config{};
+
+    // Update the config instance by iterating over the config_files
+    // Each config file can overwrite the previous config files.
+    for (const auto& config_file : config_files)
+    {
+        auto result = ParseAndUpdateConfiguration(config_file, config);
+
+        if (result.has_value() == false)
+        {
+            ReportOnError(result, config_file);
+            continue;
+        }
+
+        config = std::move(result.value());
+    }
+
+    return config;
+}
+
+}  // namespace detail
+}  // namespace log
+}  // namespace mw
+}  // namespace score

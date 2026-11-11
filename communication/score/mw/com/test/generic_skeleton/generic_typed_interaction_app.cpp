@@ -1,0 +1,248 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/runtime.h"
+#include "score/mw/com/runtime_configuration.h"
+#include "score/mw/com/test/common_test_resources/stop_token_sig_term_handler.h"
+#include "score/mw/log/logging.h"
+#include "score/string_manipulation/arguments/arguments.h"
+#include <score/stop_token.hpp>
+
+#include <array>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <thread>
+
+// Default to 64-byte if not specified by the build system
+#ifndef PAYLOAD_SIZE
+#define PAYLOAD_SIZE 64
+#endif
+
+namespace
+{
+
+struct MyEventData
+{
+    std::uint64_t counter;
+#if PAYLOAD_SIZE > 8
+    std::array<char, PAYLOAD_SIZE - 8> padding;
+#endif
+};
+
+constexpr std::string_view kInstanceSpecifier = "/test/generic/typed/interaction";
+constexpr std::uint64_t kSamplesToProcess = 30;
+constexpr int kSamplesToSubscribe = 5;
+
+#if PAYLOAD_SIZE == 64
+constexpr std::string_view kEventName = "Event64Byte";
+#elif PAYLOAD_SIZE == 32
+constexpr std::string_view kEventName = "Event32Byte";
+#elif PAYLOAD_SIZE == 16
+constexpr std::string_view kEventName = "Event16Byte";
+#elif PAYLOAD_SIZE == 8
+constexpr std::string_view kEventName = "Event8Byte";
+#else
+#error "Unsupported payload size configured."
+#endif
+
+int run_provider(score::cpp::stop_token stop_token)
+{
+    const auto instance_specifier = score::mw::com::InstanceSpecifier::Create(std::string{kInstanceSpecifier}).value();
+    const score::mw::com::DataTypeMetaInfo meta{sizeof(MyEventData), alignof(MyEventData)};
+    const std::vector<score::mw::com::EventInfo> events = {{kEventName, meta}};
+
+    score::mw::com::GenericSkeletonServiceElementInfo create_params;
+    create_params.events = events;
+
+    auto skeleton_res = score::mw::com::GenericSkeleton::Create(instance_specifier, create_params);
+    if (!skeleton_res.has_value())
+    {
+        score::mw::log::LogFatal("GenericSkeletonProvider") << "Failed to create skeleton.";
+        return 1;
+    }
+    auto& skeleton = skeleton_res.value();
+
+    if (!skeleton.OfferService().has_value())
+    {
+        score::mw::log::LogFatal("GenericSkeletonProvider") << "Failed to offer service.";
+        return 1;
+    }
+
+    auto it = skeleton.GetEvents().find(kEventName);
+    if (it == skeleton.GetEvents().cend())
+    {
+        score::mw::log::LogFatal("GenericSkeletonProvider") << "Failed to find event in skeleton.";
+        return 1;
+    }
+    auto& generic_event = it->second;
+
+    // Wait for the consumer to start and subscribe BEFORE sending data
+    score::mw::log::LogInfo("GenericSkeletonProvider")
+        << PAYLOAD_SIZE << "-byte - Waiting 5s for consumer to subscribe...";
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    std::uint64_t i{0};
+    while (!stop_token.stop_requested())
+    {
+        auto sample_res = generic_event.Allocate();
+        if (!sample_res.has_value())
+        {
+            score::mw::log::LogFatal("GenericSkeletonProvider") << "Failed to allocate sample.";
+            return 1;
+        }
+        auto* typed_sample = static_cast<MyEventData*>(sample_res.value().Get());
+        typed_sample->counter = i;
+        const auto send_result = generic_event.Send(std::move(sample_res.value()));
+        if (!send_result.has_value())
+        {
+            score::mw::log::LogFatal("GenericSkeletonProvider") << "Failed to send sample.";
+            return 1;
+        }
+
+        score::mw::log::LogInfo("GenericSkeletonProvider") << PAYLOAD_SIZE << "-byte Event Sent sample: " << i;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        i++;
+    }
+
+    skeleton.StopOfferService();
+    return 0;
+}
+
+template <typename Trait>
+class MyTestService : public Trait::Base
+{
+  public:
+    using Trait::Base::Base;
+    typename Trait::template Event<MyEventData> event_{*this, std::string{kEventName}};
+};
+using MyTestServiceProxy = score::mw::com::AsProxy<MyTestService>;
+
+int run_consumer()
+{
+    const auto instance_specifier = score::mw::com::InstanceSpecifier::Create(std::string{kInstanceSpecifier}).value();
+
+    score::Result<score::mw::com::ServiceHandleContainer<MyTestServiceProxy::HandleType>> handles_res;
+    int retries{0};
+    while (retries < 50)  // Try for up to 5 seconds
+    {
+        handles_res = MyTestServiceProxy::FindService(instance_specifier);
+        if (handles_res.has_value() && !handles_res.value().empty())
+        {
+            break;  // Service found!
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        retries++;
+    }
+
+    if (!handles_res.has_value() || handles_res.value().empty())
+    {
+        score::mw::log::LogFatal("TypedProxyConsumer") << "Failed to find service after waiting.";
+        return 1;
+    }
+
+    auto proxy_res = MyTestServiceProxy::Create(handles_res.value()[0]);
+    if (!proxy_res.has_value())
+    {
+        score::mw::log::LogFatal("TypedProxyConsumer") << "Failed to create proxy.";
+        return 1;
+    }
+    auto& proxy = proxy_res.value();
+
+    std::uint64_t received{0};
+    std::uint64_t expected{0};
+    int data_mismatches{0};
+    bool is_first_sample{true};
+    const auto subscribe_result = proxy.event_.Subscribe(kSamplesToSubscribe);
+    if (!subscribe_result.has_value())
+    {
+        score::mw::log::LogFatal("TypedProxyConsumer") << "Failed to subscribe.";
+        return 1;
+    }
+
+    while (received < kSamplesToProcess)
+    {
+        const auto get_new_samples_result = proxy.event_.GetNewSamples(
+            [&](score::mw::com::SamplePtr<MyEventData> sample) {
+                if (is_first_sample)
+                {
+                    expected = sample->counter;
+                    is_first_sample = false;
+                }
+
+                if (sample->counter != expected)
+                {
+                    score::mw::log::LogFatal("TypedProxyConsumer")
+                        << PAYLOAD_SIZE << "-byte data failed! Exp " << expected << ", got " << sample->counter;
+                    data_mismatches++;
+                }
+                else
+                {
+                    score::mw::log::LogInfo("TypedProxyConsumer")
+                        << "Received " << PAYLOAD_SIZE << "-byte sample: " << sample->counter;
+                }
+                expected++;
+                received++;
+            },
+            kSamplesToSubscribe);
+        if (!get_new_samples_result.has_value())
+        {
+            score::mw::log::LogFatal("TypedProxyConsumer") << "Failed to get new samples.";
+            return 1;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+
+    if (data_mismatches > 0)
+    {
+        score::mw::log::LogFatal("TypedProxyConsumer") << "Test failed with " << data_mismatches << " mismatches.";
+        return 1;
+    }
+    return 0;
+}
+
+}  // namespace
+
+int main(int argc, const char* argv[])
+{
+    const auto arguments = score::string_manipulation::GetArguments(argc, argv);
+    std::string mode;
+    for (std::size_t i = 1U; i < arguments.size(); ++i)
+    {
+        const std::string_view arg{arguments[i]};
+        if (arg == "--mode" && i + 1U < arguments.size())
+        {
+            mode = arguments[++i];
+        }
+    }
+
+    score::mw::com::runtime::InitializeRuntime(score::mw::com::runtime::RuntimeConfiguration(argc, argv));
+
+    score::cpp::stop_source stop_source{};
+    score::mw::com::SetupStopTokenSigTermHandler(stop_source);
+
+    if (mode == "provider")
+    {
+        return run_provider(stop_source.get_token());
+    }
+    else if (mode == "consumer")
+    {
+        return run_consumer();
+    }
+
+    score::mw::log::LogFatal("Main") << "Invalid or missing mode. Use --mode provider or --mode consumer.";
+    return 1;
+}

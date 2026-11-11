@@ -1,0 +1,297 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#ifndef SCORE_MW_COM_IMPL_BINDINGS_LOLA_SKELETON_H
+#define SCORE_MW_COM_IMPL_BINDINGS_LOLA_SKELETON_H
+
+#include "score/mw/com/impl/bindings/lola/element_fq_id.h"
+#include "score/mw/com/impl/bindings/lola/event_data_control_composite.h"
+#include "score/mw/com/impl/bindings/lola/event_data_storage.h"
+#include "score/mw/com/impl/bindings/lola/i_partial_restart_path_builder.h"
+#include "score/mw/com/impl/bindings/lola/i_shm_path_builder.h"
+#include "score/mw/com/impl/bindings/lola/messaging/i_message_passing_service.h"
+#include "score/mw/com/impl/bindings/lola/messaging/method_call_registration_guard.h"
+#include "score/mw/com/impl/bindings/lola/messaging/method_subscription_registration_guard.h"
+#include "score/mw/com/impl/bindings/lola/messaging/method_unsubscription_registration_guard.h"
+#include "score/mw/com/impl/bindings/lola/methods/method_data.h"
+#include "score/mw/com/impl/bindings/lola/methods/method_resource_map.h"
+#include "score/mw/com/impl/bindings/lola/methods/proxy_method_instance_identifier.h"
+#include "score/mw/com/impl/bindings/lola/methods/type_erased_call_queue.h"
+#include "score/mw/com/impl/bindings/lola/proxy_instance_identifier.h"
+#include "score/mw/com/impl/bindings/lola/skeleton_event_properties.h"
+#include "score/mw/com/impl/bindings/lola/skeleton_instance_identifier.h"
+#include "score/mw/com/impl/bindings/lola/skeleton_memory_manager.h"
+#include "score/mw/com/impl/bindings/lola/skeleton_method.h"
+#include "score/mw/com/impl/bindings/lola/transaction_log_set.h"
+#include "score/mw/com/impl/configuration/lola_method_id.h"
+#include "score/mw/com/impl/configuration/lola_service_instance_deployment.h"
+#include "score/mw/com/impl/configuration/quality_type.h"
+#include "score/mw/com/impl/initialize_sample_callback.h"
+#include "score/mw/com/impl/instance_identifier.h"
+#include "score/mw/com/impl/skeleton_binding.h"
+
+#include "score/filesystem/filesystem.h"
+#include "score/memory/shared/flock/exclusive_flock_mutex.h"
+#include "score/memory/shared/flock/flock_mutex_and_lock.h"
+#include "score/memory/shared/lock_file.h"
+
+#include <score/assert.hpp>
+
+#include <sys/types.h>
+
+#include <functional>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <unordered_map>
+#include <utility>
+
+namespace score::mw::com::impl::lola
+{
+
+/// \brief LoLa Skeleton implement all binding specific functionalities that are needed by a Skeleton.
+///
+/// This includes all actions that need to be performed on Service offerings, as also the possibility to register
+/// events dynamically at this skeleton. All functionality related to shared memory is managed by SkeletonMemoryManager
+/// which is owned by Skeleton.
+class Skeleton final : public SkeletonBinding
+{
+    // Suppress "AUTOSAR C++14 A11-3-1", The rule declares: "Friend declarations shall not be used".
+    // The "SkeletonAttorney" class is a helper, which sets the internal state of "Skeleton" accessing
+    // private members and used for testing purposes only.
+    // coverity[autosar_cpp14_a11_3_1_violation]
+    friend class SkeletonAttorney;
+
+  public:
+    /// \brief Result of a dynamic registration of an event at the Skeleton.
+    /// \details event_data_storage determines, where to store the data and is always contained.
+    /// event_control_qm determines, how to control the access to the data and is always contained.
+    /// event_control_asil_b is only contained, if the Skeleton is of ASIL B (otherwise a nullptr)
+    struct RegistrationResult
+    {
+        EventDataStorage& event_data_storage;
+        EventControl& event_control_qm;
+        EventControl* event_control_asil_b;
+    };
+
+    static std::unique_ptr<Skeleton> Create(const InstanceIdentifier& identifier,
+                                            score::filesystem::Filesystem filesystem,
+                                            std::unique_ptr<IShmPathBuilder> shm_path_builder,
+                                            std::unique_ptr<IPartialRestartPathBuilder> partial_restart_path_builder);
+
+    /// \brief Construct a Skeleton instance for this specific instance with possibility of passing mock objects
+    /// during construction. It is only for testing. For production code Skeleton::Create shall be used.
+    Skeleton(InstanceIdentifier identifier,
+             const LolaServiceInstanceDeployment& lola_service_instance_deployment,
+             const LolaServiceTypeDeployment& lola_service_type_deployment,
+             score::filesystem::Filesystem filesystem,
+             std::unique_ptr<IShmPathBuilder> shm_path_builder,
+             std::unique_ptr<IPartialRestartPathBuilder> partial_restart_path_builder,
+             std::optional<memory::shared::LockFile> service_instance_existence_marker_file,
+             std::unique_ptr<score::memory::shared::FlockMutexAndLock<score::memory::shared::ExclusiveFlockMutex>>
+                 service_instance_existence_flock_mutex_and_lock);
+
+    ~Skeleton() noexcept override;
+
+    Skeleton(const Skeleton&) = delete;
+    Skeleton& operator=(const Skeleton&) = delete;
+    Skeleton(Skeleton&& other) = delete;
+    Skeleton& operator=(Skeleton&& other) = delete;
+
+    Result<void> PrepareOffer(
+        SkeletonEventBindings& events,
+        SkeletonFieldBindings& fields,
+        std::optional<RegisterShmObjectTraceCallback> register_shm_object_trace_callback) override;
+
+    void PrepareStopOffer(std::optional<UnregisterShmObjectTraceCallback> unregister_shm_object_callback) override;
+
+    BindingType GetBindingType() const noexcept override
+    {
+        return BindingType::kLoLa;
+    };
+
+    /// \brief Enables dynamic registration of Events (typed and generic) at the Skeleton.
+    /// \param element_fq_id The full qualified ID of the element (event) that shall be registered.
+    /// \param element_properties Properties of the element (e.g. number of slots, max subscribers).
+    /// \param data_type_size_info The size and alignment of a single data sample in bytes.
+    /// \param initialize_sample_callback Optional callback to initialize a sample in the underlying type-erased
+    ///        storage slots. Only used (forwarded to SkeletonMemoryManager::CreateEventDataInCreatedSharedMemory()) in
+    ///        case the EventDataStorage is freshly created in this call. If instead an already existing
+    ///        EventDataStorage (of a previously offered instance) is (re-)opened, the callback is ignored, since
+    ///        re-initializing the slots would potentially tamper with event data that consumers of the previous
+    ///        instance offering might still be accessing.
+    auto Register(const ElementFqId element_fq_id,
+                  const SkeletonEventProperties& element_properties,
+                  const memory::DataTypeSizeInfo data_type_size_info,
+                  const std::optional<InitializeSampleCallback>& initialize_sample_callback = std::nullopt)
+        -> RegistrationResult;
+
+    QualityType GetInstanceQualityType() const;
+
+    /// \brief Cleans up all allocated slots for this SkeletonEvent of any previous running instance
+    /// \details Note: Only invoke _after_ a crash was detected!
+    void CleanupSharedMemoryAfterCrash();
+
+    /// \brief "Disconnects" unsafe QM consumers by stop-offering the service instances QM part.
+    /// \details Only supported/valid for a skeleton instance, where GetInstanceQualityType() returns
+    ///          QualityType::kASIL_B. Calling it for a skeleton, which returns QualityType::kASIL_QM, will lead to
+    ///          an assert/termination.
+    void DisconnectQmConsumers();
+
+    /// \brief Function allowing a SkeletonMethod to register itself with its parent skeleton.
+    ///
+    /// This registration is required so that the Skeleton can access its owned methods.
+    ///
+    /// Synchronisation: This registration must be done in the constructor of the SkeletonMethod which is guaranteed to
+    /// be called during construction of the full Skeleton created by the user. Therefore, the map of skeleton methods
+    /// will not be modified after this construction phase and so can be used in any function (except for the
+    /// constructor of Skeleton) without locking a mutex.
+    void RegisterMethod(const UniqueMethodIdentifier method_id, SkeletonMethod& skeleton_method);
+
+    bool VerifyAllMethodHandlersRegistered() const override;
+
+  private:
+    /// \brief Strategies for handling shared memory during PrepareOffer
+    enum class ShmReuseStrategy : std::uint8_t
+    {
+        kUnknownStrategy = 0U,
+        kOpenGatewayForwardedShm,
+        kRecreateShm,
+        kReuseExistingShm
+    };
+
+    /// \brief Strategies for handling shared memory during PrepareStopOffer
+    enum class ShmRemovalStrategy : std::uint8_t
+    {
+        kUnknownStrategy = 0U,
+        kRemoveNeitherShmNorMarkerFile,
+        kRemoveMarkerFileOnly,
+        kRemoveShmAndMarkerFile
+    };
+
+    /// \brief Determines which shared memory reuse strategy to apply
+    /// \param previous_shm_region_unused_by_proxies Whether we could exclusively lock the usage marker file
+    /// \return The appropriate SHM reuse strategy
+    ShmReuseStrategy DetermineShmReuseStrategy(bool previous_shm_region_unused_by_proxies) const noexcept;
+
+    /// \brief Determines which shared memory removal strategy to apply during StopOffer
+    /// \param can_exclusively_lock_usage_file Whether we could exclusively lock the usage marker file
+    /// \return The appropriate SHM removal strategy
+    ShmRemovalStrategy DetermineShmRemovalStrategy(bool can_exclusively_lock_usage_file) const noexcept;
+
+    /// \brief Checks if this skeleton is forwarding a service from another VM via gateway
+    /// \return true if this skeleton mirrors SHM from another VM (read-only access), false if it owns the SHM
+    /// (read-write)
+    bool IsGatewayForwardedSkeleton() const noexcept
+    {
+        return lola_service_instance_deployment_.inter_vm_forwarded_;
+    }
+
+    Result<void> OnServiceMethodsSubscribed(const ProxyInstanceIdentifier& proxy_instance_identifier,
+                                            const uid_t proxy_uid,
+                                            const QualityType asil_level,
+                                            const pid_t proxy_pid);
+
+    Result<void> OnServiceMethodsUnsubscribed(const ProxyInstanceIdentifier& proxy_instance_identifier);
+
+    Result<std::pair<MethodSubscriptionRegistrationGuard, MethodUnsubscriptionRegistrationGuard>>
+    RegisterMethodHandlers(const QualityType asil_level,
+                           const SkeletonInstanceIdentifier& skeleton_instance_identifier,
+                           IMessagePassingService& lola_message_passing);
+
+    using MethodIdsToUnsubscribe = std::vector<UniqueMethodIdentifier>;
+
+    std::pair<score::Result<void>, MethodIdsToUnsubscribe> SubscribeMethods(
+        const MethodData& method_data,
+        const ProxyInstanceIdentifier proxy_instance_identifier,
+        const uid_t proxy_uid,
+        const pid_t proxy_pid,
+        const QualityType asil_level);
+    /// \brief Will unsubscribe each of the provided ProxyMethods from their corresponding SkeletonMethod.
+    ///
+    /// \pre All provided method_ids were successfully subscribed via SubscribeMethods.
+    void UnsubscribeMethods(const std::vector<UniqueMethodIdentifier>& method_ids,
+                            const ProxyInstanceIdentifier& proxy_instance_identifier);
+
+    static MethodData& GetMethodData(const memory::shared::ManagedMemoryResource& resource);
+
+    /// \brief Gets the set of allowed proxy consumer IDs from the configuration
+    IMessagePassingService::AllowedConsumerUids GetAllowedConsumers(const QualityType asil_level) const;
+
+    InstanceIdentifier identifier_;
+    QualityType quality_type_;
+    LolaServiceInstanceId::InstanceId lola_instance_id_;
+    LolaServiceTypeDeployment::ServiceId lola_service_id_;
+    const LolaServiceInstanceDeployment& lola_service_instance_deployment_;
+
+    std::unique_ptr<IShmPathBuilder> shm_path_builder_;
+
+    SkeletonMemoryManager memory_manager_;
+
+    std::unique_ptr<IPartialRestartPathBuilder> partial_restart_path_builder_;
+    std::optional<memory::shared::LockFile> service_instance_existence_marker_file_;
+    std::optional<memory::shared::LockFile> service_instance_usage_marker_file_;
+
+    std::unique_ptr<score::memory::shared::FlockMutexAndLock<score::memory::shared::ExclusiveFlockMutex>>
+        service_instance_existence_flock_mutex_and_lock_;
+
+    /// \brief Mutex to synchronise calls to OnServiceMethodsSubscribed
+    ///
+    /// OnServiceMethodsSubscribed can be called by the message passing concurrently, since different Proxies could
+    /// subscribe at the same time or a single Proxy may send the same message multiple times (See
+    /// score/docs/features/ipc/lola/method/README.md for details).
+    std::mutex on_service_methods_subscribed_mutex_;
+    MethodResourceMap method_resources_;
+    std::unordered_map<UniqueMethodIdentifier, std::reference_wrapper<SkeletonMethod>> skeleton_methods_;
+
+    /// \brief RAII guard objects which will unregister a ServiceMethodSubscribedHandler/RegisterMethodCallHandler
+    /// on destruction
+    ///
+    /// Each guard corresponds to the method subscription / method call handler which was registered in
+    /// Skeleton::PrepareOffer() (in case any methods were registered). The guard objects will be destroyed in
+    /// Skeleton::PrepareStopOffer()
+    std::optional<MethodSubscriptionRegistrationGuard> method_subscription_registration_guard_qm_;
+    std::optional<MethodSubscriptionRegistrationGuard> method_subscription_registration_guard_asil_b_;
+
+    /// \brief RAII guard objects which will unregister a ServiceMethodUnsubscribedHandler on destruction
+    ///
+    /// Each guard corresponds to the method unsubscription handler which was registered in Skeleton::PrepareOffer().
+    /// The guard objects will be destroyed in Skeleton::PrepareStopOffer().
+    std::optional<MethodUnsubscriptionRegistrationGuard> method_unsubscription_registration_guard_qm_;
+    std::optional<MethodUnsubscriptionRegistrationGuard> method_unsubscription_registration_guard_asil_b_;
+
+    bool was_old_shm_region_reopened_;
+    bool use_gateway_forwarded_shm_;
+
+    score::filesystem::Filesystem filesystem_;
+
+    /// Set by PrepareOffer / PrepareStopOffer respectively. ~Skeleton terminates if PrepareOffer was called but
+    /// PrepareStopOffer was not.
+    bool prepare_offer_called_;
+    bool prepare_stop_offer_called_;
+
+    /// \brief Scope that is passed to the MethodCallHandler handler that is registered for each ProxyMethod
+    ///
+    /// This scope will be manually expired in PrepareStopOffer which will prevent any ProxyMethod from calling a
+    /// method.
+    safecpp::Scope<> method_call_handler_scope_;
+
+    /// \brief Scope that is passed to the ServiceMethodSubscribedHandler
+    ///
+    /// This scope will be manually expired in PrepareStopOffer which will prevent any Proxy from subscribing to
+    /// this method.
+    safecpp::Scope<> on_service_method_subscribed_handler_scope_;
+};
+
+}  // namespace score::mw::com::impl::lola
+
+#endif  // SCORE_MW_COM_IMPL_BINDINGS_LOLA_SKELETON_H

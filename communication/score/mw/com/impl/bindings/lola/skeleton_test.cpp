@@ -1,0 +1,1761 @@
+/********************************************************************************
+ * Copyright (c) 2025 Contributors to the Eclipse Foundation
+ *
+ * See the NOTICE file(s) distributed with this work for additional
+ * information regarding copyright ownership.
+ *
+ * This program and the accompanying materials are made available under the
+ * terms of the Apache License Version 2.0 which is available at
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ ********************************************************************************/
+#include "score/mw/com/impl/bindings/lola/skeleton.h"
+#include "score/mw/com/impl/binding_type.h"
+#include "score/mw/com/impl/bindings/lola/partial_restart_path_builder_mock.h"
+#include "score/mw/com/impl/bindings/lola/provider_event_data_control_local_view.h"
+#include "score/mw/com/impl/bindings/lola/shm_path_builder_mock.h"
+#include "score/mw/com/impl/bindings/lola/test/skeleton_test_resources.h"
+#include "score/mw/com/impl/bindings/lola/test/transaction_log_test_resources.h"
+#include "score/mw/com/impl/bindings/lola/tracing/tracing_runtime.h"
+#include "score/mw/com/impl/bindings/mock_binding/skeleton_event.h"
+#include "score/mw/com/impl/com_error.h"
+#include "score/mw/com/impl/configuration/quality_type.h"
+#include "score/mw/com/impl/service_discovery_mock.h"
+#include "score/mw/com/impl/tracing/tracing_runtime_mock.h"
+
+#include "score/result/result.h"
+
+#include <gtest/gtest.h>
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace score::mw::com::impl::lola
+{
+namespace
+{
+
+using namespace ::testing;
+
+const os::Fcntl::Operation kNonBlockingExclusiveLockOperation =
+    os::Fcntl::Operation::kLockExclusive | score::os::Fcntl::Operation::kLockNB;
+const os::Fcntl::Operation kUnlockOperation = os::Fcntl::Operation::kUnLock;
+
+std::optional<SkeletonBinding::RegisterShmObjectTraceCallback> kEmptyRegisterShmObjectTraceCallback{};
+
+void* const kDummyShmObjectBaseAddress = reinterpret_cast<void*>(static_cast<uintptr_t>(1000));
+const memory::shared::ISharedMemoryResource::FileDescriptor kDummyShmObjectFileDescriptor{55};
+
+/// \brief Test fixture which mocks the SharedMemoryFactory, allowing us to return a mocked SharedMemoryResource.
+/// \details Tests which check the creation of the shared memory can use SharedMemoryResourceMocks. Tests which check
+/// the allocated memory can use SharedMemoryResourceHeapAllocatorMock to allow checking the memory without using actual
+/// shared memory.
+class SkeletonTestMockedSharedMemoryFixture : public SkeletonMockedMemoryFixture
+{
+  protected:
+    SkeletonTestMockedSharedMemoryFixture() : SkeletonMockedMemoryFixture()
+    {
+        // Default behaviour for get the usable base addresses of the mocked memory resources using the constructed
+        // ServiceDataControl / Storage created above.
+        ON_CALL(*control_qm_shared_memory_resource_mock_, getUsableBaseAddress())
+            .WillByDefault(Return(static_cast<void*>(existing_service_data_control_qm_.get())));
+        ON_CALL(*control_asil_b_shared_memory_resource_mock_, getUsableBaseAddress())
+            .WillByDefault(Return(static_cast<void*>(existing_service_data_control_b_.get())));
+        ON_CALL(*data_shared_memory_resource_mock_, getUsableBaseAddress())
+            .WillByDefault(Return(static_cast<void*>(&existing_service_data_storage_)));
+    }
+
+    const LolaServiceTypeDeployment* GetLolaServiceTypeDeployment(const ServiceTypeDeployment& service_type_deployment)
+    {
+        const auto* const lola_service_type_deployment =
+            std::get_if<LolaServiceTypeDeployment>(&service_type_deployment.binding_info_);
+        EXPECT_NE(lola_service_type_deployment, nullptr);
+        return lola_service_type_deployment;
+    }
+
+    SkeletonTestMockedSharedMemoryFixture& GivenASkeletonWithTwoMethods()
+    {
+        const auto instance_identifier =
+            make_InstanceIdentifier(test::kValidInstanceDeploymentWithMethods, test::kValidMinimalTypeDeployment);
+
+        InitialiseSkeleton(instance_identifier);
+
+        fooo_method_ = std::make_unique<SkeletonMethod>(*skeleton_, fooo_unique_method_id_);
+        dumb_method_ = std::make_unique<SkeletonMethod>(*skeleton_, dumb_unique_method_id_);
+
+        return *this;
+    }
+
+    // ServiceDataControl, ServiceDataStorage and relevant views which are used in tests in which there already exists a
+    // shared memory region which the Skeleton must open and clean up if necessary. The ServiceDataControl /
+    // ServiceDataStorage are returned when getUsableBaseAddress() are called on the relevant mocked
+    // SharedMemoryResources.
+    std::unique_ptr<ServiceDataControl> existing_service_data_control_qm_{
+        CreateServiceDataControlWithEvent(test::kDummyElementFqId, QualityType::kASIL_QM)};
+    std::unique_ptr<ServiceDataControl> existing_service_data_control_b_{
+        CreateServiceDataControlWithEvent(test::kDummyElementFqId, QualityType::kASIL_B)};
+    ServiceDataStorage existing_service_data_storage_{
+        CreateServiceDataStorageWithEvent<test::TestSampleType>(test::kDummyElementFqId)};
+
+    const UniqueMethodIdentifier fooo_unique_method_id_{test::kFooMethodId, MethodType::kMethod};
+    const UniqueMethodIdentifier dumb_unique_method_id_{test::kDumbMethodId, MethodType::kMethod};
+
+    std::unique_ptr<SkeletonMethod> fooo_method_{nullptr};
+    std::unique_ptr<SkeletonMethod> dumb_method_{nullptr};
+
+    SkeletonBinding::SkeletonEventBindings events_{};
+    SkeletonBinding::SkeletonFieldBindings fields_{};
+
+    mock_binding::SkeletonEvent mock_event_binding_{};
+};
+
+TEST_F(SkeletonTestMockedSharedMemoryFixture, GetBindingType)
+{
+    // Given a deployment based on a default LolaServiceInstanceDeployment which has QM and ASIL B support
+    const auto instance_identifier =
+        make_InstanceIdentifier(test::kValidMinimalAsilInstanceDeployment, test::kValidMinimalTypeDeployment);
+
+    // ... and a skeleton constructed from it
+    InitialiseSkeleton(instance_identifier);
+
+    // expect, that it returns BindingType::kLoLa, when asked about its binding type
+    EXPECT_EQ(skeleton_->GetBindingType(), BindingType::kLoLa);
+}
+
+TEST_F(SkeletonTestMockedSharedMemoryFixture, VerifyAllMethodHandlersRegisteredSucceedsWhenAllMethodsAreRegistered)
+{
+    GivenASkeletonWithTwoMethods();
+
+    // When a callback is registered to both methods
+    auto fooo_callback =
+        [](QualityType, std::optional<score::cpp::span<std::byte>>, std::optional<score::cpp::span<std::byte>>) {};
+    auto dumb_callback =
+        [](QualityType, std::optional<score::cpp::span<std::byte>>, std::optional<score::cpp::span<std::byte>>) {
+            std::cout << "bla\n";
+        };
+
+    std::ignore = fooo_method_->RegisterHandler(fooo_callback);
+    std::ignore = dumb_method_->RegisterHandler(dumb_callback);
+
+    // Then VerifyAllMethodHandlersRegistered succeeds
+    EXPECT_EQ(skeleton_->VerifyAllMethodHandlersRegistered(), true);
+}
+
+TEST_F(SkeletonTestMockedSharedMemoryFixture, VerifyAllMethodHandlersRegisteredFailsWhenNotAllMethodsAreRegistered)
+{
+    GivenASkeletonWithTwoMethods();
+
+    // When one of the methods does not have a callback registered
+    auto fooo_callback =
+        [](QualityType, std::optional<score::cpp::span<std::byte>>, std::optional<score::cpp::span<std::byte>>) {};
+
+    std::ignore = fooo_method_->RegisterHandler(fooo_callback);
+
+    // Then VerifyAllMethodHandlersRegistered fails with kBindingFailure
+    EXPECT_EQ(skeleton_->VerifyAllMethodHandlersRegistered(), false);
+}
+
+TEST_F(SkeletonTestMockedSharedMemoryFixture, StopOfferCallsUnregisterShmObjectTraceCallback)
+{
+    MockFunction<void(std::string_view, impl::ServiceElementType)> unregister_shm_object_trace_callback{};
+
+    // Given a deployment based on an default LolaServiceInstanceDeployment which has QM and ASIL B support
+    // ... and a skeleton constructed from it
+    InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+    // and that flocking the service instance usage marker file succeeds in PrepareOffer and in PrepareStopOffer
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kUnlockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+
+    // Then the shared memory will be cleaned up in PrepareStopOffer
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kControlChannelPathQm));
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kControlChannelPathAsilB));
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kDataChannelPath));
+
+    EXPECT_CALL(unregister_shm_object_trace_callback,
+                Call(tracing::TracingRuntime::kDummyElementNameForShmRegisterCallback,
+                     tracing::TracingRuntime::kDummyElementTypeForShmRegisterCallback));
+
+    // Then PrepareOffer will succeed
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // When a service is stopped with the optional UnregisterShmObjectTraceCallback set
+    skeleton_->PrepareStopOffer(unregister_shm_object_trace_callback.AsStdFunction());
+}
+
+using SkeletonTestSharedMemoryCreationFixture = SkeletonTestMockedSharedMemoryFixture;
+TEST_F(SkeletonTestSharedMemoryCreationFixture, PrepareServiceOfferFailsOnShmCreateFailureForQmControl)
+{
+    using namespace memory::shared;
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // But when trying to create a control qm segment fails by returning a nullptr
+    EXPECT_CALL(shared_memory_factory_mock_,
+                Create(test::kControlChannelPathQm, _, _, WritablePermissionsMatcher(), false))
+        .WillOnce(Return(nullptr));
+
+    // Then PrepareOffer will fail
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonTestSharedMemoryCreationFixture, PrepareServiceOfferFailsOnShmCreateFailureForAsilBControl)
+{
+    using namespace memory::shared;
+
+    // Given a Skeleton constructed from a valid identifier referencing an ASIL B deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+    // Expecting that creating QM control segment succeeds
+    EXPECT_CALL(shared_memory_factory_mock_,
+                Create(test::kControlChannelPathQm, _, _, WritablePermissionsMatcher(), false));
+
+    // But when trying to create an ASIL B control segment fails by returning a nullptr
+    EXPECT_CALL(shared_memory_factory_mock_,
+                Create(test::kControlChannelPathAsilB, _, _, WritablePermissionsMatcher(), false))
+        .WillOnce(Return(nullptr));
+
+    // Then PrepareOffer will fail
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonTestSharedMemoryCreationFixture, PrepareServiceOfferFailsOnShmCreateFailureForData)
+{
+    using namespace memory::shared;
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // Expecting that creating control section succeeds
+    EXPECT_CALL(shared_memory_factory_mock_,
+                Create(test::kControlChannelPathQm, _, _, WritablePermissionsMatcher(), false));
+
+    // But when trying to create a data segment fails by returning a nullptr
+    EXPECT_CALL(shared_memory_factory_mock_, Create(test::kDataChannelPath, _, _, ReadablePermissionsMatcher(), false))
+        .WillOnce(Return(nullptr));
+
+    // Then PrepareOffer will fail
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonTestSharedMemoryCreationFixture, PrepareServiceOfferWithTraceCallback)
+{
+    RecordProperty("Verifies", "SCR-19178261, SCR-18166404");
+    RecordProperty("Description",
+                   "Checks whether, typed-memory is preferred (SCR-19178261) for creation of shm-object for DATA in "
+                   "case it is tracing relevant. Checks, that registration is only tried, when shm-object has been "
+                   "successfully created in typed-mem (SCR-18166404).");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    using namespace memory::shared;
+
+    MockFunction<void(std::string_view, impl::ServiceElementType, ISharedMemoryResource::FileDescriptor, void*)>
+        register_shm_object_trace_callback{};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    EXPECT_CALL(*data_shared_memory_resource_mock_, IsShmInTypedMemory()).WillOnce(Return(true));
+
+    EXPECT_CALL(*data_shared_memory_resource_mock_, GetFileDescriptor())
+        .WillOnce(Return(kDummyShmObjectFileDescriptor));
+    EXPECT_CALL(*data_shared_memory_resource_mock_, getBaseAddress()).WillOnce(Return(kDummyShmObjectBaseAddress));
+
+    // and that the callback will be called once
+    EXPECT_CALL(register_shm_object_trace_callback,
+                Call(tracing::TracingRuntime::kDummyElementNameForShmRegisterCallback,
+                     tracing::TracingRuntime::kDummyElementTypeForShmRegisterCallback,
+                     kDummyShmObjectFileDescriptor,
+                     kDummyShmObjectBaseAddress));
+
+    // Then PrepareOffer will succeed
+    EXPECT_TRUE(
+        skeleton_->PrepareOffer(events_, fields_, register_shm_object_trace_callback.AsStdFunction()).has_value());
+}
+
+TEST_F(SkeletonTestSharedMemoryCreationFixture, PrepareServiceOfferWithTraceCallbackNeverCalledIfNotInTypedMemory)
+{
+    RecordProperty("Verifies", "SCR-19178261, SCR-18166404");
+    RecordProperty("Description",
+                   "Checks whether, typed-memory is preferred (SCR-19178261) for creation of shm-object for DATA in "
+                   "case it is tracing relevant. Checks, that registration is only tried, when shm-object has been "
+                   "successfully created in typed-mem (SCR-18166404).");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    using namespace memory::shared;
+
+    MockFunction<void(std::string_view, impl::ServiceElementType, ISharedMemoryResource::FileDescriptor, void*)>
+        register_shm_object_trace_callback{};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier()).WithNoConnectedProxy();
+
+    // and that the shared memory resource cannot be created in typed memory
+    EXPECT_CALL(*data_shared_memory_resource_mock_, IsShmInTypedMemory()).WillOnce(Return(false));
+
+    EXPECT_CALL(*data_shared_memory_resource_mock_, GetFileDescriptor()).Times(0);
+    EXPECT_CALL(*data_shared_memory_resource_mock_, getBaseAddress()).Times(0);
+
+    // and that the callback will never be called
+    EXPECT_CALL(register_shm_object_trace_callback, Call(_, _, _, _)).Times(0);
+
+    // Then PrepareOffer will succeed
+    EXPECT_TRUE(
+        skeleton_->PrepareOffer(events_, fields_, register_shm_object_trace_callback.AsStdFunction()).has_value());
+}
+
+using SkeletonPrepareOfferFixture = SkeletonTestMockedSharedMemoryFixture;
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferCreatesSharedMemoryIfOpeningAndFLockingServiceUsageMarkerFileSucceeds)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+    // and that opening the service instance usage marker file succeeds
+    ExpectServiceUsageMarkerFileCreatedOrOpenedAndClosed();
+
+    // and that flocking the service instance usage marker file succeeds
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, test::kNonBlockingExlusiveLockOperation))
+        .WillOnce(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, test::kUnlockOperation))
+        .WillOnce(Return(score::cpp::blank{}));
+
+    // Expecting that QM and ASIL-B control sections and a data section are successfully created
+    EXPECT_CALL(shared_memory_factory_mock_,
+                Create(test::kControlChannelPathQm, _, _, WritablePermissionsMatcher(), false));
+    EXPECT_CALL(shared_memory_factory_mock_,
+                Create(test::kControlChannelPathAsilB, _, _, WritablePermissionsMatcher(), false));
+    EXPECT_CALL(shared_memory_factory_mock_, Create(test::kDataChannelPath, _, _, ReadablePermissionsMatcher(), false))
+        .WillOnce(
+            WithArg<1>([this](auto initialize_callback) -> std::shared_ptr<memory::shared::ISharedMemoryResource> {
+                std::invoke(initialize_callback, data_shared_memory_resource_mock_);
+                return data_shared_memory_resource_mock_;
+            }));
+
+    // Then PrepareOffer will succeed
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture,
+       PrepareOfferRemovesOldSharedMemoryArtefactsIfOpeningAndFLockingServiceUsageMarkerFileSucceeds)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier()).WithNoConnectedProxy();
+
+    // and that opening the service instance usage marker file succeeds
+    ExpectServiceUsageMarkerFileCreatedOrOpenedAndClosed();
+
+    // and that flocking the service instance usage marker file succeeds
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, test::kNonBlockingExlusiveLockOperation))
+        .WillOnce(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, test::kUnlockOperation))
+        .WillOnce(Return(score::cpp::blank{}));
+
+    EXPECT_CALL(shared_memory_factory_mock_, RemoveStaleArtefacts(test::kControlChannelPathQm));
+    EXPECT_CALL(shared_memory_factory_mock_, RemoveStaleArtefacts(test::kControlChannelPathAsilB));
+    EXPECT_CALL(shared_memory_factory_mock_, RemoveStaleArtefacts(test::kDataChannelPath));
+
+    // Then PrepareOffer will succeed
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferFailsIfOpeningServiceUsageMarkerFileFails)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // and that opening the service instance usage marker file fails
+    EXPECT_CALL(partial_restart_path_builder_mock_, GetServiceInstanceUsageMarkerFilePath(_))
+        .WillOnce(Return(test::kServiceInstanceUsageFilePath));
+    EXPECT_CALL(*fcntl_mock_, open(StrEq(test::kServiceInstanceUsageFilePath.data()), _, _))
+        .WillOnce(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EPERM))));
+
+    // Then PrepareOffer will fail
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferOpensAndCleansExistingSharedMemoryIfFLockingServiceUsageMarkerFilefails)
+{
+    auto skeleton_event_data_control_qm = GetProviderEventDataControlLocalFromServiceDataControl(
+        test::kDummyElementFqId, *existing_service_data_control_qm_);
+    auto skeleton_event_data_control_asil_b = GetProviderEventDataControlLocalFromServiceDataControl(
+        test::kDummyElementFqId, *existing_service_data_control_b_);
+
+    // Given a Skeleton constructed from a valid identifier referencing an ASIL-B deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+    // and that flocking the service instance usage marker file fails
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, test::kNonBlockingExlusiveLockOperation))
+        .WillOnce(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EWOULDBLOCK))));
+
+    // and given that QM and ASIL B control segments contain (previously) allocated slots that are in writing
+    auto first_allocation_qm = skeleton_event_data_control_qm.AllocateNextSlot();
+    ASSERT_TRUE(first_allocation_qm.has_value());
+
+    auto first_allocation_asil_b = skeleton_event_data_control_asil_b.AllocateNextSlot();
+    ASSERT_TRUE(first_allocation_asil_b.has_value());
+
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathQm, true, _));
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathAsilB, true, _));
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kDataChannelPath, true, _))
+        .WillOnce(Return(data_shared_memory_resource_mock_));
+
+    // Then PrepareOffer will succeed and clean up the service data controls
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // And a new allocation will return the same slot as before, as it was cleaned up
+    auto second_allocation_qm = skeleton_event_data_control_qm.AllocateNextSlot();
+    ASSERT_TRUE(second_allocation_qm.has_value());
+    EXPECT_EQ(first_allocation_qm.value(), second_allocation_qm.value());
+
+    auto second_allocation_asil_b = skeleton_event_data_control_asil_b.AllocateNextSlot();
+    ASSERT_TRUE(second_allocation_asil_b.has_value());
+    EXPECT_EQ(first_allocation_asil_b.value(), second_allocation_asil_b.value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferFailsIfOpeningExistingSharedMemoryDataFails)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier()).WithAlreadyConnectedProxy();
+
+    // Expecting that the QM control section is successfully opened
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathQm, true, _));
+
+    // But expecting that when trying to open the data segment fails by returning a nullptr
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kDataChannelPath, true, _)).WillOnce(Return(nullptr));
+
+    // Then PrepareOffer will fail
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferFailsIfOpeningExistingSharedMemoryControlQmFails)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier()).WithAlreadyConnectedProxy();
+
+    // Expecting that when trying to open a control qm segment fails by returning a nullptr
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathQm, true, _)).WillOnce(Return(nullptr));
+
+    // Then PrepareOffer will fail
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferFailsIfOpeningExistingSharedMemoryControlAsilBFails)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier()).WithAlreadyConnectedProxy();
+
+    // Expecting that the QM control section is successfully opened
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathQm, true, _));
+
+    // But expecting that when trying to create a control asil b segment fails by returning a nullptr
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathAsilB, true, _)).WillOnce(Return(nullptr));
+
+    // Then PrepareOffer will fail
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferWillUpdateThePidInTheDataSegmentWhenOpeningSharedMemory)
+{
+    const pid_t pid{7654};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier()).WithAlreadyConnectedProxy();
+
+    // and that the PID will be retrieved from the lola runtime
+    EXPECT_CALL(lola_runtime_mock_, GetPid()).WillOnce(Return(pid));
+
+    // Then PrepareOffer will succeed and clean up the service data controls
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // and the ServiceDataStorage contains the PID returned by the lola runtime
+    EXPECT_EQ(existing_service_data_storage_.GetSkeletonPid(), pid);
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferWillCallRegisterShmObjectTraceCallbackWhenOpeningSharedMemory)
+{
+    auto memory_resource_mock = std::static_pointer_cast<memory::shared::SharedMemoryResourceHeapAllocatorMock>(
+        data_shared_memory_resource_mock_);
+
+    MockFunction<void(
+        std::string_view, impl::ServiceElementType, memory::shared::ISharedMemoryResource::FileDescriptor, void*)>
+        register_shm_object_trace_callback{};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier()).WithAlreadyConnectedProxy();
+
+    ON_CALL(*memory_resource_mock, IsShmInTypedMemory()).WillByDefault(Return(true));
+    ON_CALL(*memory_resource_mock, GetFileDescriptor()).WillByDefault(Return(kDummyShmObjectFileDescriptor));
+    ON_CALL(*memory_resource_mock, getBaseAddress()).WillByDefault(Return(kDummyShmObjectBaseAddress));
+
+    // Expecting that the register shm object trace callback will be called once
+    EXPECT_CALL(register_shm_object_trace_callback,
+                Call(tracing::TracingRuntime::kDummyElementNameForShmRegisterCallback,
+                     tracing::TracingRuntime::kDummyElementTypeForShmRegisterCallback,
+                     kDummyShmObjectFileDescriptor,
+                     kDummyShmObjectBaseAddress));
+
+    // When calling PrepareOffer
+    EXPECT_TRUE(
+        skeleton_->PrepareOffer(events_, fields_, register_shm_object_trace_callback.AsStdFunction()).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture,
+       PrepareOfferOpensExistingSharedMemoryForGatewayForwardedServiceWhenUsageFileCanBeLocked)
+{
+    auto service_instance_deployment = test::kValidMinimalAsilInstanceDeployment;
+    auto* const lola_service_instance_deployment =
+        std::get_if<LolaServiceInstanceDeployment>(&service_instance_deployment.bindingInfo_);
+    ASSERT_NE(lola_service_instance_deployment, nullptr);
+    lola_service_instance_deployment->inter_vm_support_ = true;
+    lola_service_instance_deployment->inter_vm_forwarded_ = true;
+
+    const auto instance_identifier =
+        make_InstanceIdentifier(service_instance_deployment, test::kValidMinimalTypeDeployment);
+    InitialiseSkeleton(instance_identifier).WithNoConnectedProxy();
+
+    EXPECT_CALL(shared_memory_factory_mock_, RemoveStaleArtefacts(_)).Times(0);
+    EXPECT_CALL(shared_memory_factory_mock_, Create(test::kControlChannelPathQm, _, _, _, _)).Times(0);
+    EXPECT_CALL(shared_memory_factory_mock_, Create(test::kControlChannelPathAsilB, _, _, _, _)).Times(0);
+    EXPECT_CALL(shared_memory_factory_mock_, Create(test::kDataChannelPath, _, _, _, _)).Times(0);
+
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathQm, true, _));
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathAsilB, true, _));
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kDataChannelPath, true, _))
+        .WillOnce(Return(data_shared_memory_resource_mock_));
+
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferFailsForGatewayForwardedServiceWhenOpeningSharedMemoryFails)
+{
+    auto service_instance_deployment = test::kValidMinimalAsilInstanceDeployment;
+    auto* const lola_service_instance_deployment =
+        std::get_if<LolaServiceInstanceDeployment>(&service_instance_deployment.bindingInfo_);
+    ASSERT_NE(lola_service_instance_deployment, nullptr);
+    lola_service_instance_deployment->inter_vm_support_ = true;
+    lola_service_instance_deployment->inter_vm_forwarded_ = true;
+
+    const auto instance_identifier =
+        make_InstanceIdentifier(service_instance_deployment, test::kValidMinimalTypeDeployment);
+    InitialiseSkeleton(instance_identifier).WithNoConnectedProxy();
+
+    EXPECT_CALL(shared_memory_factory_mock_, Open(test::kControlChannelPathQm, true, _)).WillOnce(Return(nullptr));
+
+    EXPECT_FALSE(
+        skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+}
+
+using SkeletonPrepareOfferDeathTest = SkeletonPrepareOfferFixture;
+TEST_F(SkeletonPrepareOfferDeathTest, CallingPrepareOfferWhenLolaRuntimeCannotBeAccessedTerminates)
+{
+    auto test_function = [this] {
+        // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+        InitialiseSkeleton(GetValidInstanceIdentifier()).WithAlreadyConnectedProxy();
+
+        // and that when trying to get the Lola runtime from the runtime a nullptr is returned
+        ON_CALL(runtime_mock_, GetBindingRuntime(_)).WillByDefault(Return(nullptr));
+
+        // When calling PrepareOffer
+        score::cpp::ignore =
+            skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value();
+    };
+
+    // Then the program terminates
+    EXPECT_DEATH(test_function(), ".*");
+}
+
+TEST_F(SkeletonPrepareOfferFixture, PrepareOfferRecreateAfterReuseDoesNotUseStaleReopenedFlag)
+{
+    // Given a skeleton constructed from a valid QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // and given that on every Create() (which runs inside CreateSharedMemory) the reopened flag is observed to be false
+    EXPECT_CALL(shared_memory_factory_mock_, Create(test::kControlChannelPathQm, _, _, _, false))
+        .Times(AnyNumber())
+        .WillRepeatedly(
+            WithArg<1>([this](auto initialize_callback) -> std::shared_ptr<memory::shared::ISharedMemoryResource> {
+                EXPECT_FALSE(SkeletonAttorney{*skeleton_}.WasOldShmRegionReopened());
+                std::invoke(initialize_callback, control_qm_shared_memory_resource_mock_);
+                return control_qm_shared_memory_resource_mock_;
+            }));
+    EXPECT_CALL(shared_memory_factory_mock_, Create(test::kDataChannelPath, _, _, _, _))
+        .Times(AnyNumber())
+        .WillRepeatedly(
+            WithArg<1>([this](auto initialize_callback) -> std::shared_ptr<memory::shared::ISharedMemoryResource> {
+                std::invoke(initialize_callback, data_shared_memory_resource_mock_);
+                return data_shared_memory_resource_mock_;
+            }));
+
+    // and given the usage-marker flock drives the SHM strategy per phase, in order:
+    //   Offer #1:      lock succeeds        -> create SHM
+    //   StopOffer #1:  lock fails (proxy)   -> keep SHM
+    //   Offer #2:      lock fails (proxy)   -> reuse existing SHM (sets was_old_shm_region_reopened_ = true)
+    //   StopOffer #2:  lock succeeds        -> remove SHM
+    //   Offer #3:      lock succeeds        -> recreate SHM
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .WillOnce(Return(score::cpp::blank{}))
+        .WillOnce(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EWOULDBLOCK))))
+        .WillOnce(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EWOULDBLOCK))))
+        .WillOnce(Return(score::cpp::blank{}))
+        .WillOnce(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kUnlockOperation))
+        .Times(AnyNumber())
+        .WillRepeatedly(Return(score::cpp::blank{}));
+
+    // When the initial Offer is made, then it creates the shared memory
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, {}).has_value());
+
+    // When StopOffer is called while a proxy is still attached, then the shared memory is kept
+    skeleton_->PrepareStopOffer({});
+
+    // When the service is offered again, then it reuses the existing shared memory
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, {}).has_value());
+
+    // When StopOffer is called with no proxy attached, then the shared memory is removed
+    skeleton_->PrepareStopOffer({});
+
+    // When the service is offered a final time, then it recreates the shared memory
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, {}).has_value());
+}
+
+using SkeletonPrepareStopOfferFixture = SkeletonTestMockedSharedMemoryFixture;
+TEST_F(SkeletonPrepareStopOfferFixture, PrepareStopOfferRemovesSharedMemoryIfUsageMarkerFileCanBeLocked)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // and that flocking the service instance usage marker file succeeds in PrepareOffer and in PrepareStopOffer
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kUnlockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+
+    // Then the shared memory will be cleaned up in PrepareStopOffer
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kControlChannelPathQm));
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kDataChannelPath));
+
+    // When PrepareOffer succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    const auto before_shared_memory_control_qm_usage_counter = control_qm_shared_memory_resource_mock_.use_count();
+    const auto before_shared_memory_data_usage_counter = data_shared_memory_resource_mock_.use_count();
+
+    // and PrepareStopOffer is called
+    skeleton_->PrepareStopOffer({});
+
+    const auto after_shared_memory_control_qm_usage_counter = control_qm_shared_memory_resource_mock_.use_count();
+    const auto after_shared_memory_data_usage_counter = data_shared_memory_resource_mock_.use_count();
+
+    // Then the shared memory shared pointers in the skeleton will be destroyed
+    EXPECT_EQ(after_shared_memory_control_qm_usage_counter, before_shared_memory_control_qm_usage_counter - 1);
+    EXPECT_EQ(after_shared_memory_data_usage_counter, before_shared_memory_data_usage_counter - 1);
+}
+
+TEST_F(SkeletonPrepareStopOfferFixture, PrepareStopOfferRemovesUsageMarkerFileIfUsageMarkerFileCanBeLocked)
+{
+    bool was_usage_marker_file_closed{false};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // and that opening the service instance usage marker file succeeds
+    EXPECT_CALL(partial_restart_path_builder_mock_, GetServiceInstanceUsageMarkerFilePath(_))
+        .WillOnce(Return(test::kServiceInstanceUsageFilePath));
+    EXPECT_CALL(*fcntl_mock_, open(StrEq(test::kServiceInstanceUsageFilePath.data()), _, _))
+        .WillOnce(Return(test::kServiceInstanceUsageFileDescriptor));
+
+    // and that flocking the service instance usage marker file succeeds in PrepareOffer and in PrepareStopOffer
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kUnlockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+
+    // Then the shared memory will be cleaned up in PrepareStopOffer
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kControlChannelPathQm));
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kDataChannelPath));
+
+    // and the service usage marker file will be closed in PrepareStopOffer
+    EXPECT_CALL(*unistd_mock_, close(test::kServiceInstanceUsageFileDescriptor))
+        .WillOnce(InvokeWithoutArgs(
+            [&was_usage_marker_file_closed]() mutable noexcept -> score::cpp::expected_blank<score::os::Error> {
+                was_usage_marker_file_closed = true;
+                return {};
+            }));
+
+    // When PrepareOffer succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // and PrepareStopOffer is called
+    EXPECT_FALSE(was_usage_marker_file_closed);
+    skeleton_->PrepareStopOffer({});
+
+    // Then the service usage marker file will be closed in PrepareStopOffer
+    EXPECT_TRUE(was_usage_marker_file_closed);
+}
+
+TEST_F(SkeletonPrepareStopOfferFixture, PrepareStopOfferDoesNotRemoveSharedMemoryIfUsageMarkerFileCannotBeLocked)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // and that flocking the service instance usage marker file fails in PrepareStopOffer
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .WillRepeatedly(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EWOULDBLOCK))));
+
+    // but succeeds in PrepareOffer
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .WillOnce(Return(score::cpp::blank{}))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kUnlockOperation))
+        .WillOnce(Return(score::cpp::blank{}))
+        .RetiresOnSaturation();
+
+    // Then the shared memory will be not be cleaned up in PrepareStopOffer
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kControlChannelPathQm)).Times(0);
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kDataChannelPath)).Times(0);
+
+    // When PrepareOffer succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    const auto before_shared_memory_control_qm_usage_counter = control_qm_shared_memory_resource_mock_.use_count();
+    const auto before_shared_memory_data_usage_counter = data_shared_memory_resource_mock_.use_count();
+
+    // and PrepareStopOffer is called
+    skeleton_->PrepareStopOffer({});
+
+    const auto after_shared_memory_control_qm_usage_counter = control_qm_shared_memory_resource_mock_.use_count();
+    const auto after_shared_memory_data_usage_counter = data_shared_memory_resource_mock_.use_count();
+
+    // Then the shared memory shared pointers in the skeleton will not be destroyed in PrepareStopOffer
+    EXPECT_EQ(after_shared_memory_control_qm_usage_counter, before_shared_memory_control_qm_usage_counter);
+    EXPECT_EQ(after_shared_memory_data_usage_counter, before_shared_memory_data_usage_counter);
+}
+
+TEST_F(SkeletonPrepareStopOfferFixture, PrepareStopOfferDoesNotRemoveUsageMarkerFileIfUsageMarkerFileCannotBeLocked)
+{
+    // Since close and unlink will be called during destruction of the skeleton, which is done in the fixture
+    // destruction after these flags will be destroyed, we pass them as weak pointers to the lambdas to be invoked when
+    // close / unlink are called.
+    auto was_usage_marker_file_closed{std::make_shared<bool>(false)};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // and that opening the service instance usage marker file succeeds
+    EXPECT_CALL(partial_restart_path_builder_mock_, GetServiceInstanceUsageMarkerFilePath(_))
+        .WillOnce(Return(test::kServiceInstanceUsageFilePath));
+    EXPECT_CALL(*fcntl_mock_, open(StrEq(test::kServiceInstanceUsageFilePath.data()), _, _))
+        .WillOnce(Return(test::kServiceInstanceUsageFileDescriptor));
+
+    // and that flocking the service instance usage marker file fails in PrepareStopOffer
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .WillRepeatedly(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EWOULDBLOCK))));
+
+    // but succeeds in PrepareOffer
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .WillOnce(Return(score::cpp::blank{}))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kUnlockOperation))
+        .WillOnce(Return(score::cpp::blank{}))
+        .RetiresOnSaturation();
+
+    // and the service usage marker file will be closed and unlinked when the Skeleton is destructed
+    std::weak_ptr<bool> was_usage_marker_file_closed_weak_ptr{was_usage_marker_file_closed};
+
+    // and the service usage marker file will be closed when the Skeleton is destructed
+    EXPECT_CALL(*unistd_mock_, close(test::kServiceInstanceUsageFileDescriptor))
+        .WillOnce(InvokeWithoutArgs(
+            [was_usage_marker_file_closed_weak_ptr]() mutable noexcept -> score::cpp::expected_blank<score::os::Error> {
+                if (std::shared_ptr<bool> was_usage_marker_file_closed_shared_ptr =
+                        was_usage_marker_file_closed_weak_ptr.lock())
+                {
+                    *was_usage_marker_file_closed_shared_ptr = true;
+                }
+                return {};
+            }));
+
+    // When PrepareOffer succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // and PrepareStopOffer is called
+    EXPECT_FALSE(*was_usage_marker_file_closed);
+    skeleton_->PrepareStopOffer({});
+
+    // Then the service usage marker file will not be closed in PrepareStopOffer
+    EXPECT_FALSE(*was_usage_marker_file_closed);
+}
+
+TEST_F(SkeletonPrepareStopOfferFixture, PrepareStopOfferForGatewayForwardedServiceRemovesOnlyUsageMarkerFile)
+{
+    bool was_usage_marker_file_closed{false};
+
+    auto service_instance_deployment = test::kValidMinimalAsilInstanceDeployment;
+    auto* const lola_service_instance_deployment =
+        std::get_if<LolaServiceInstanceDeployment>(&service_instance_deployment.bindingInfo_);
+    ASSERT_NE(lola_service_instance_deployment, nullptr);
+    lola_service_instance_deployment->inter_vm_support_ = true;
+    lola_service_instance_deployment->inter_vm_forwarded_ = true;
+
+    const auto instance_identifier =
+        make_InstanceIdentifier(service_instance_deployment, test::kValidMinimalTypeDeployment);
+    InitialiseSkeleton(instance_identifier);
+
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kNonBlockingExclusiveLockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(test::kServiceInstanceUsageFileDescriptor, kUnlockOperation))
+        .Times(2)
+        .WillRepeatedly(Return(score::cpp::blank{}));
+
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kControlChannelPathQm)).Times(0);
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kControlChannelPathAsilB)).Times(0);
+    EXPECT_CALL(shared_memory_factory_mock_, Remove(test::kDataChannelPath)).Times(0);
+
+    EXPECT_CALL(*unistd_mock_, close(test::kServiceInstanceUsageFileDescriptor))
+        .WillOnce(InvokeWithoutArgs(
+            [&was_usage_marker_file_closed]() mutable noexcept -> score::cpp::expected_blank<score::os::Error> {
+                was_usage_marker_file_closed = true;
+                return {};
+            }));
+
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    EXPECT_FALSE(was_usage_marker_file_closed);
+    skeleton_->PrepareStopOffer({});
+    EXPECT_TRUE(was_usage_marker_file_closed);
+}
+
+using SkeletonDisconnectQmConsumersFixture = SkeletonTestMockedSharedMemoryFixture;
+TEST_F(SkeletonDisconnectQmConsumersFixture, CallingDisconnectQmConsumersCallsStopOfferServiceOnServiceDiscoveryBinding)
+{
+    // Given a Skeleton constructed from a valid identifier referencing an ASIL-B deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+    // and that GetServiceDiscovery will be called on the runtime which returns a mocked ServiceDiscovery
+    ServiceDiscoveryMock service_discovery_mock{};
+    ON_CALL(runtime_mock_, GetServiceDiscovery()).WillByDefault(ReturnRef(service_discovery_mock));
+
+    // Expecting that StopOffer will be called on the service discovery binding
+    EXPECT_CALL(service_discovery_mock, StopOfferService(_, IServiceDiscovery::QualityTypeSelector::kAsilQm));
+
+    // When calling DisconnectQmConsumers
+    skeleton_->DisconnectQmConsumers();
+}
+
+TEST_F(SkeletonDisconnectQmConsumersFixture,
+       CallingDisconnectQmConsumersWhenServiceDiscoveryBindingReturnsErrorDoesNotTerminate)
+{
+    // Given a Skeleton constructed from a valid identifier referencing an ASIL-B deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+    // and that GetServiceDiscovery will be called on the runtime which returns a mocked ServiceDiscovery
+    ServiceDiscoveryMock service_discovery_mock{};
+    ON_CALL(runtime_mock_, GetServiceDiscovery()).WillByDefault(ReturnRef(service_discovery_mock));
+
+    // and that StopOffer will be called on the service discovery binding which returns an error
+    ON_CALL(service_discovery_mock, StopOfferService(_, IServiceDiscovery::QualityTypeSelector::kAsilQm))
+        .WillByDefault(Return(MakeUnexpected(ComErrc::kBindingFailure)));
+
+    // When calling DisconnectQmConsumers
+    // Then we don't terminate
+    skeleton_->DisconnectQmConsumers();
+}
+
+using SkeletonDisconnectQmConsumersDeathTest = SkeletonDisconnectQmConsumersFixture;
+TEST_F(SkeletonDisconnectQmConsumersDeathTest, CallingDisconnectQmConsumersWithQMInstanceIdentifierTerminates)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // When calling DisconnectQmConsumers
+    // Then we terminate
+    EXPECT_DEATH(skeleton_->DisconnectQmConsumers(), ".*");
+}
+
+using SkeletonGetInstanceQualityTypeFixture = SkeletonTestMockedSharedMemoryFixture;
+TEST_F(SkeletonGetInstanceQualityTypeFixture, CallingGetInstanceQualityTypeWithQmInstanceIdentifierReturnsQM)
+{
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(GetValidInstanceIdentifier());
+
+    // When calling GetInstanceQualityType
+    const auto quality_type = skeleton_->GetInstanceQualityType();
+
+    // Then the quality type should be QM
+    EXPECT_EQ(quality_type, QualityType::kASIL_QM);
+}
+
+TEST_F(SkeletonGetInstanceQualityTypeFixture, CallingGetInstanceQualityTypeWithAsilBInstanceIdentifierReturnsAsilB)
+{
+    // Given a Skeleton constructed from a valid identifier referencing an ASIL-B deployment
+    InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+    // When calling GetInstanceQualityType
+    const auto quality_type = skeleton_->GetInstanceQualityType();
+
+    // Then the quality type should be ASIL-B
+    EXPECT_EQ(quality_type, QualityType::kASIL_B);
+}
+
+class SkeletonRegisterParamaterisedFixture : public SkeletonTestMockedSharedMemoryFixture,
+                                             public WithParamInterface<ServiceElementType>
+{
+  public:
+    EventDataControlComposite<> GetEventDataControlCompositeFromRegistrationResult(
+        const Skeleton::RegistrationResult& registration_result)
+    {
+        event_control_qm_local_view_.emplace(registration_result.event_control_qm.data_control);
+
+        if (registration_result.event_control_asil_b != nullptr)
+        {
+            event_control_asil_b_local_view_.emplace(registration_result.event_control_asil_b->data_control);
+        }
+
+        ProviderEventDataControlLocalView<>* event_control_asil_b_local_view =
+            registration_result.event_control_asil_b != nullptr ? &event_control_asil_b_local_view_.value() : nullptr;
+        return EventDataControlComposite<>{event_control_qm_local_view_.value(), event_control_asil_b_local_view};
+    }
+
+  private:
+    std::optional<ProviderEventDataControlLocalView<>> event_control_qm_local_view_{};
+    std::optional<ProviderEventDataControlLocalView<>> event_control_asil_b_local_view_{};
+};
+
+TEST_P(SkeletonRegisterParamaterisedFixture, RegisterWillCreateEventDataIfShmRegionWasCreated)
+{
+    // Given a Skeleton constructed from a valid identifier referencing an ASIL-B deployment
+    // The event that will be registered below is also offered here, so that the fixed-capacity containers within
+    // ServiceDataStorage are sized to hold it.
+    events_.emplace(test::kFooEventName, mock_event_binding_);
+    InitialiseSkeleton(GetValidASILInstanceIdentifier()).WithNoConnectedProxy();
+
+    // when calling PrepareOffer ... expect, that it succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // when the event is registered with the skeleton
+    const auto* const lola_service_type_deployment = GetLolaServiceTypeDeployment(test::kValidMinimalTypeDeployment);
+    ElementFqId element_fq_id{lola_service_type_deployment->service_id_,
+                              test::kFooEventId,
+                              test::kDefaultLolaInstanceId,
+                              ServiceElementType::EVENT};
+    auto registration_result =
+        skeleton_->Register(element_fq_id, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    // Then the Register call should return pointers to the created control (qm and asil-b) and data sections which can
+    // be used to allocate slots
+    auto event_data_control_composite = GetEventDataControlCompositeFromRegistrationResult(registration_result);
+    const auto allocation = event_data_control_composite.AllocateNextSlot();
+    ASSERT_TRUE(allocation.allocated_slot_index.has_value());
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, RegisterWillOpenEventDataIfShmRegionWasOpened)
+{
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidASILInstanceIdentifierWithEvent()
+                                                     : GetValidASILInstanceIdentifierWithField()};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(instance_identifier).WithAlreadyConnectedProxy();
+
+    // when calling PrepareOffer ... expect, that it succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // when the event is registered with the skeleton
+    auto registration_result =
+        skeleton_->Register(test::kDummyElementFqId, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    // Then the Register call should return views to the opened control section and pointer to the opened data section
+    // in the opened shared memory region (we check the control section views by allocating a slot in the opened region
+    // and checking that the allocation is reflected in the view)
+    auto& existing_event_control_qm =
+        GetEventControlFromServiceDataControl(test::kDummyElementFqId, *existing_service_data_control_qm_);
+    auto& existing_event_control_asil_b =
+        GetEventControlFromServiceDataControl(test::kDummyElementFqId, *existing_service_data_control_b_);
+    auto& existing_event_data_storage =
+        GetEventStorageFromServiceDataStorage(test::kDummyElementFqId, existing_service_data_storage_);
+
+    ProviderEventDataControlLocalView<> opened_event_control_local_qm =
+        registration_result.event_control_qm.data_control;
+
+    ASSERT_TRUE(registration_result.event_control_asil_b != nullptr);
+    ProviderEventDataControlLocalView<> opened_event_control_local_asil_b =
+        registration_result.event_control_asil_b->data_control;
+
+    EXPECT_EQ(existing_event_control_qm.data_control.state_slots_[0], 0U);
+    EXPECT_EQ(existing_event_control_asil_b.data_control.state_slots_[0], 0U);
+    opened_event_control_local_qm.AllocateNextSlot();
+    opened_event_control_local_asil_b.AllocateNextSlot();
+    EXPECT_EQ(existing_event_control_qm.data_control.state_slots_[0], std::numeric_limits<std::uint32_t>::max());
+    EXPECT_EQ(existing_event_control_asil_b.data_control.state_slots_[0], std::numeric_limits<std::uint32_t>::max());
+
+    EXPECT_EQ(&registration_result.event_data_storage, &existing_event_data_storage);
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, RollbackWillBeCalledOnQmTransactionLogIfShmRegionWasOpened)
+{
+    // Given a QM ServiceDataControl which contains a TransactionLogSet with valid transactions
+    auto proxy_event_data_control_qm_local = GetConsumerEventDataControlLocalFromServiceDataControl(
+        test::kDummyElementFqId, *existing_service_data_control_qm_);
+    auto& transaction_log_set =
+        GetTransactionLogSetFromServiceDataControl(test::kDummyElementFqId, *existing_service_data_control_qm_);
+    InsertSkeletonTransactionLogWithValidTransactions(proxy_event_data_control_qm_local, transaction_log_set);
+    EXPECT_TRUE(IsSkeletonTransactionLogRegistered(transaction_log_set));
+
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidInstanceIdentifierWithEvent()
+                                                     : GetValidInstanceIdentifierWithField()};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(instance_identifier).WithAlreadyConnectedProxy();
+
+    // when calling PrepareOffer ... expect, that it succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // when the event is registered with the skeleton
+    score::cpp::ignore =
+        skeleton_->Register(test::kDummyElementFqId, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    // Then the TransactionLog should be rollbacked during construction and removed
+    EXPECT_FALSE(IsSkeletonTransactionLogRegistered(transaction_log_set));
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, RollbackWillBeCalledOnAsilBTransactionLogIfShmRegionWasOpened)
+{
+    // Given an Asil B ServiceDataControl which contains a TransactionLogSet with valid transactions
+    auto proxy_event_data_control_asil_b_local = GetConsumerEventDataControlLocalFromServiceDataControl(
+        test::kDummyElementFqId, *existing_service_data_control_b_);
+    auto& transaction_log_set =
+        GetTransactionLogSetFromServiceDataControl(test::kDummyElementFqId, *existing_service_data_control_b_);
+    InsertSkeletonTransactionLogWithValidTransactions(proxy_event_data_control_asil_b_local, transaction_log_set);
+    EXPECT_TRUE(IsSkeletonTransactionLogRegistered(transaction_log_set));
+
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidASILInstanceIdentifierWithEvent()
+                                                     : GetValidASILInstanceIdentifierWithField()};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(instance_identifier).WithAlreadyConnectedProxy();
+
+    // when calling PrepareOffer ... expect, that it succeeds
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // when the event is registered with the skeleton
+    score::cpp::ignore =
+        skeleton_->Register(test::kDummyElementFqId, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    // Then the TransactionLog should be rollbacked during construction and removed
+    EXPECT_FALSE(IsSkeletonTransactionLogRegistered(transaction_log_set));
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, TracingWillBeDisabledAndTransactionLogRemainsIfRollbackFails)
+{
+    impl::tracing::TracingRuntimeMock tracing_runtime_mock{};
+    ON_CALL(runtime_mock_, GetTracingRuntime()).WillByDefault(Return(&tracing_runtime_mock));
+
+    // Given a QM ServiceDataControl which contains a TransactionLogSet with invalid transactions
+    auto proxy_event_data_control_qm_local = GetConsumerEventDataControlLocalFromServiceDataControl(
+        test::kDummyElementFqId, *existing_service_data_control_qm_);
+    auto& transaction_log_set =
+        GetTransactionLogSetFromServiceDataControl(test::kDummyElementFqId, *existing_service_data_control_qm_);
+    InsertSkeletonTransactionLogWithInvalidTransactions(proxy_event_data_control_qm_local, transaction_log_set);
+    EXPECT_TRUE(IsSkeletonTransactionLogRegistered(transaction_log_set));
+
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidInstanceIdentifierWithEvent()
+                                                     : GetValidInstanceIdentifierWithField()};
+
+    // Given a Skeleton constructed from a valid identifier referencing a QM deployment
+    InitialiseSkeleton(instance_identifier).WithAlreadyConnectedProxy();
+
+    // and that tracing will be disabled
+    EXPECT_CALL(tracing_runtime_mock, DisableTracing());
+
+    // when calling PrepareOffer ... expect, that it succeeds
+    std::ignore = skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback));
+
+    // when the event is registered with the skeleton
+    score::cpp::ignore =
+        skeleton_->Register(test::kDummyElementFqId, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    // Then the TransactionLog should still exist as it was not removed due to the rollback failing
+    EXPECT_TRUE(IsSkeletonTransactionLogRegistered(transaction_log_set));
+}
+
+/// \brief Test case simulates (via a mock SkeletonEvent) the registration of a SkeletonEvent at its parent Skeleton
+/// during Skeleton::PrepareOffer() and checks, that after this registration, the related event-data-slots
+/// are accessible.
+TEST_P(SkeletonRegisterParamaterisedFixture, ValidEventDataSlotsExistAfterEventIsRegistered)
+{
+    using namespace memory::shared;
+
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidInstanceIdentifierWithEvent()
+                                                     : GetValidInstanceIdentifierWithField()};
+
+    // Given a skeleton with one event "fooEvent" registered
+    InitialiseSkeleton(instance_identifier);
+
+    // when PrepareOffer the service
+    std::ignore = skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback));
+
+    // when the event is registered with the skeleton
+    const auto* const lola_service_type_deployment = GetLolaServiceTypeDeployment(test::kValidMinimalTypeDeployment);
+    ElementFqId element_fq_id{
+        lola_service_type_deployment->service_id_, test::kFooEventId, test::kDefaultLolaInstanceId, element_type};
+    auto event_reg_result =
+        skeleton_->Register(element_fq_id, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    // Then a valid slot-vector with the right size exists and we can access/write to it:
+    ASSERT_EQ(event_reg_result.event_data_storage.GetNumberOfSlots(), test::kMaxSlots);
+    auto* type_erased_slot_ptr =
+        event_reg_result.event_data_storage.GetTypeErasedDataSlot(3, test::kTestSampleTypeSizeInfo.Size());
+    test::TestSampleType test_value = 42U;
+    memcpy(type_erased_slot_ptr, &test_value, test::kTestSampleTypeSizeInfo.Size());
+
+    CleanUpSkeleton();
+}
+
+/// \brief Test case is almost identical to test ValidEventDataSlotsExistAfterEventIsRegistered above. Instead of just
+/// testing the event-data-slot existence, it really does an AllocateNextSlot() call on the data structures.
+TEST_P(SkeletonRegisterParamaterisedFixture, CanAllocateSlotAfterEventIsRegistered)
+{
+    using namespace memory::shared;
+
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidInstanceIdentifierWithEvent()
+                                                     : GetValidInstanceIdentifierWithField()};
+
+    // Given a skeleton with one event "fooEvent" registered
+    InitialiseSkeleton(instance_identifier);
+
+    // when PrepareOffer the service
+    std::ignore = skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback));
+
+    // when the event is registered with the skeleton
+    const auto* const lola_service_type_deployment = GetLolaServiceTypeDeployment(test::kValidMinimalTypeDeployment);
+    ElementFqId element_fq_id{
+        lola_service_type_deployment->service_id_, test::kFooEventId, test::kDefaultLolaInstanceId, element_type};
+    auto event_reg_result =
+        skeleton_->Register(element_fq_id, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    // Then we can allocate and free slots on that event
+    auto event_data_control_composite = GetEventDataControlCompositeFromRegistrationResult(event_reg_result);
+    auto allocation = event_data_control_composite.AllocateNextSlot();
+    ASSERT_TRUE(allocation.allocated_slot_index.has_value());
+    EXPECT_EQ(allocation.allocated_slot_index.value(), 0);
+
+    CleanUpSkeleton();
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, AllocateAfterCleanUp)
+{
+    using namespace memory::shared;
+
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidInstanceIdentifierWithEvent()
+                                                     : GetValidInstanceIdentifierWithField()};
+
+    // Given a skeleton with one event "fooEvent" registered
+    InitialiseSkeleton(instance_identifier);
+
+    std::ignore = skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback));
+
+    const auto* const lola_service_type_deployment = GetLolaServiceTypeDeployment(test::kValidMinimalTypeDeployment);
+    ElementFqId element_fq_id{
+        lola_service_type_deployment->service_id_, test::kFooEventId, test::kDefaultLolaInstanceId, element_type};
+    auto event_reg_result =
+        skeleton_->Register(element_fq_id, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+
+    auto event_data_control_composite = GetEventDataControlCompositeFromRegistrationResult(event_reg_result);
+    auto allocation = event_data_control_composite.AllocateNextSlot();
+
+    // When cleaning up
+    skeleton_->CleanupSharedMemoryAfterCrash();
+
+    // Then the same slot can get allocated
+    auto allocation_after_cleanup = event_data_control_composite.AllocateNextSlot();
+    ASSERT_TRUE(allocation_after_cleanup.allocated_slot_index.has_value());
+    EXPECT_EQ(allocation.allocated_slot_index.value(), allocation_after_cleanup.allocated_slot_index.value());
+
+    CleanUpSkeleton();
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, ValidEventMetaInfoExistAfterEventIsRegistered)
+{
+    RecordProperty("lobster-tracing", "Communication.EventTypeInfoSource");
+    RecordProperty("Description", "Checks that the event meta info for an event is published by the Skeleton.");
+    RecordProperty("TestingTechnique", "Requirements-based test");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+    RecordProperty("Priority", "2");
+
+    /// \brief only locally used complex SampleType/event-data-type
+    struct VeryComplexType
+    {
+        std::uint64_t m1_;
+        std::float_t m2_;
+        std::array<std::uint16_t, 7u> m3_;
+    };
+
+    constexpr std::size_t number_of_slots = 3U;
+
+    const ServiceElementType element_type = GetParam();
+
+    // Given a skeleton with two events FOO_EVENT_NAME, "dumbEvent" registered
+    // Note: We are using only maxSamples = 3 for these events as we base this test on a configured shm-size
+    // CONFIGURED_DEPL_SHM_SIZE ... where the slots have to fit in.
+    ServiceTypeDeployment service_type_depl = CreateTypeDeployment(
+        1U, {{test::kFooEventName, test::kFooEventId}, {test::kDumbEventName, test::kDumbEventId}});
+
+    mock_binding::SkeletonEvent foo_event{}, dumb_event{};
+
+    std::vector<std::pair<std::string, LolaEventInstanceDeployment>> lola_event_inst_depls;
+    std::vector<std::pair<std::string, LolaFieldInstanceDeployment>> lola_field_inst_depls;
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, foo_event);
+        events_.emplace(test::kDumbEventName, dumb_event);
+
+        lola_event_inst_depls.push_back(
+            {test::kFooEventName, LolaEventInstanceDeployment{number_of_slots, 10U, 1U, true, 0}});
+        lola_event_inst_depls.push_back(
+            {test::kDumbEventName, LolaEventInstanceDeployment{number_of_slots, 10U, 1U, true, 0}});
+    }
+    else
+    {
+        fields_.emplace(test::kFooFieldName, foo_event);
+        fields_.emplace(test::kDumbFieldName, dumb_event);
+
+        lola_field_inst_depls.push_back(
+            {test::kFooFieldName,
+             LolaFieldInstanceDeployment{
+                 LolaEventInstanceDeployment{number_of_slots, 10U, 1U, true, 0}, false, false}});
+        lola_field_inst_depls.push_back(
+            {test::kDumbFieldName,
+             LolaFieldInstanceDeployment{
+                 LolaEventInstanceDeployment{number_of_slots, 10U, 1U, true, 0}, false, false}});
+    }
+    ServiceInstanceDeployment service_instance_deployment{
+        test::kFooService,
+        CreateLolaServiceInstanceDeployment(test::kDefaultLolaInstanceId,
+                                            lola_event_inst_depls,
+                                            lola_field_inst_depls,
+                                            {},
+                                            {},
+                                            {},
+                                            test::kConfiguredDeploymentShmSize,
+                                            test::kConfiguredDeploymentControlAsilBShmSize,
+                                            test::kConfiguredDeploymentControlQmShmSize),
+        QualityType::kASIL_QM,
+        test::kFooInstanceSpecifier};
+
+    const auto instance_identifier = make_InstanceIdentifier(service_instance_deployment, service_type_depl);
+    InitialiseSkeleton(instance_identifier);
+
+    // when the service offering is prepared
+    std::ignore = skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback));
+
+    // and foo_event is registered with the skeleton with 5 slots
+    const auto* const lola_service_type_deployment = GetLolaServiceTypeDeployment(test::kValidMinimalTypeDeployment);
+    ElementFqId foo_element_fq_id{
+        lola_service_type_deployment->service_id_, test::kFooEventId, test::kDefaultLolaInstanceId, element_type};
+    std::ignore = skeleton_->Register(foo_element_fq_id,
+                                      test::kDefaultEventProperties,
+                                      memory::DataTypeSizeInfo{sizeof(std::uint8_t), alignof(std::uint8_t)});
+
+    // and dumb_event is registered with the skeleton with 5 slots
+    ElementFqId dumb_element_fq_id{
+        lola_service_type_deployment->service_id_, test::kDumbEventId, test::kDefaultLolaInstanceId, element_type};
+    std::ignore = skeleton_->Register(dumb_element_fq_id,
+                                      test::kDefaultEventProperties,
+                                      memory::DataTypeSizeInfo{sizeof(VeryComplexType), alignof(VeryComplexType)});
+
+    // Expect, that we can then retrieve the meta-info of the registered events
+    SkeletonAttorney skeleton_test_attorney{*skeleton_};
+    const auto& event_foo_meta_info = skeleton_test_attorney.GetEventMetaInfo(ElementFqId{
+        lola_service_type_deployment->service_id_, test::kFooEventId, test::kDefaultLolaInstanceId, element_type});
+    const auto& event_dumb_meta_info = skeleton_test_attorney.GetEventMetaInfo(ElementFqId{
+        lola_service_type_deployment->service_id_, test::kDumbEventId, test::kDefaultLolaInstanceId, element_type});
+
+    // and they have the expected properties
+    ASSERT_EQ(event_foo_meta_info.data_type_info_.Size(), sizeof(std::uint8_t));
+    ASSERT_EQ(event_foo_meta_info.data_type_info_.Alignment(), alignof(std::uint8_t));
+
+    ASSERT_EQ(event_dumb_meta_info.data_type_info_.Size(), sizeof(VeryComplexType));
+    ASSERT_EQ(event_dumb_meta_info.data_type_info_.Alignment(), alignof(VeryComplexType));
+
+    CleanUpSkeleton();
+}
+
+using SkeletonRegisterParamaterisedDeathTest = SkeletonRegisterParamaterisedFixture;
+TEST_P(SkeletonRegisterParamaterisedDeathTest, NoMetaInfoExistsForInvalidElementId)
+{
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidInstanceIdentifierWithEvent()
+                                                     : GetValidInstanceIdentifierWithField()};
+
+    // Given a skeleton with one event "fooEvent" registered
+    InitialiseSkeleton(instance_identifier);
+
+    // when PrepareOffer the service
+    std::ignore = skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback));
+
+    // and the event is registered with the skeleton
+    const auto* const lola_service_type_deployment = GetLolaServiceTypeDeployment(test::kValidMinimalTypeDeployment);
+    ElementFqId element_fq_id{
+        lola_service_type_deployment->service_id_, test::kFooEventId, test::kDefaultLolaInstanceId, element_type};
+    skeleton_->Register(element_fq_id,
+                        test::kDefaultEventProperties,
+                        memory::DataTypeSizeInfo{sizeof(std::uint8_t), alignof(std::uint8_t)});
+
+    // but when retrieving meta-info for a not registered ElementFqId
+    const std::uint16_t UNKNOWN_EVENT_ID{99U};
+    ElementFqId event_unknown_fqn{
+        lola_service_type_deployment->service_id_, UNKNOWN_EVENT_ID, test::kDefaultLolaInstanceId, element_type};
+    SkeletonAttorney skeleton_test_attorney{*skeleton_};
+
+    // Then the program terminates, since no meta-info is registered for this (unknown) ElementFqId.
+    EXPECT_DEATH(score::cpp::ignore = skeleton_test_attorney.GetEventMetaInfo(event_unknown_fqn), ".*");
+
+    CleanUpSkeleton();
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, CallingRegisterWithSameServiceElementTwiceWillTerminate)
+{
+    RecordProperty("Verifies", "SCR-21555839");
+    RecordProperty("Description",
+                   "Checks that trying to register 2 service elements with the same ElementFqId will terminate. If "
+                   "the identification of a service element is incorrect (e.g. different service elements map to the "
+                   "same ElementFqId), then registering the second service element will not overwrite the first "
+                   "service element. It will instead lead to a termination.");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("Priority", "1");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    auto test_function = [this]() noexcept {
+        // Given a Skeleton constructed from a valid identifier referencing a QM deployment. The event that will be
+        // registered below is offered, so that the fixed-capacity containers within ServiceDataStorage can hold it and
+        // the (intended) termination is triggered by the duplicate registration rather than by a capacity overflow.
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+        InitialiseSkeleton(GetValidASILInstanceIdentifier());
+
+        EXPECT_TRUE(
+            skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+        const auto* const lola_service_type_deployment =
+            GetLolaServiceTypeDeployment(test::kValidMinimalTypeDeployment);
+        ElementFqId element_fq_id{lola_service_type_deployment->service_id_,
+                                  test::kFooEventId,
+                                  test::kDefaultLolaInstanceId,
+                                  ServiceElementType::EVENT};
+
+        // When calling register twice with the same ElementFqId
+        score::cpp::ignore =
+            skeleton_->Register(element_fq_id, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+        score::cpp::ignore =
+            skeleton_->Register(element_fq_id, test::kDefaultEventProperties, test::kTestSampleTypeSizeInfo);
+    };
+    // Then we should terminate
+    EXPECT_DEATH(test_function(), ".*");
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, RegisterWillOpenEventDataForGatewayForwardedSkeleton)
+{
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+
+    // Given a gateway-forwarded ASIL-B skeleton deployment (inter_vm_support_ and inter_vm_forwarded_ set)
+    auto service_instance_deployment = element_type == ServiceElementType::EVENT
+                                           ? test::kValidAsilInstanceDeploymentWithEvent
+                                           : test::kValidAsilInstanceDeploymentWithField;
+    auto* const lola_deployment = std::get_if<LolaServiceInstanceDeployment>(&service_instance_deployment.bindingInfo_);
+    ASSERT_NE(lola_deployment, nullptr);
+    lola_deployment->inter_vm_support_ = true;
+    lola_deployment->inter_vm_forwarded_ = true;
+    const auto gateway_instance_identifier =
+        make_InstanceIdentifier(service_instance_deployment, test::kValidMinimalTypeDeployment);
+
+    // When PrepareOffer is called it opens (not creates) the existing shared memory (use_gateway_forwarded_shm_ = true)
+    InitialiseSkeleton(gateway_instance_identifier).WithNoConnectedProxy();
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // When Register is called on the gateway-forwarded skeleton
+    const auto result = skeleton_->Register(test::kDummyElementFqId,
+                                            test::kDefaultEventProperties,
+                                            memory::DataTypeSizeInfo{sizeof(std::uint8_t), alignof(std::uint8_t)});
+
+    // Then it returns valid pointer for the ASIL-B control.
+    EXPECT_NE(result.event_control_asil_b, nullptr);
+}
+
+TEST_P(SkeletonRegisterParamaterisedFixture, RegisterWillOpenEventDataForReopenedSkeleton)
+{
+    const ServiceElementType element_type = GetParam();
+
+    if (element_type == ServiceElementType::EVENT)
+    {
+        events_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    else
+    {
+        fields_.emplace(test::kFooEventName, mock_event_binding_);
+    }
+    const InstanceIdentifier instance_identifier{element_type == ServiceElementType::EVENT
+                                                     ? GetValidASILInstanceIdentifierWithEvent()
+                                                     : GetValidASILInstanceIdentifierWithField()};
+
+    // Given a Skeleton with an already-connected proxy: flock of usage marker file fails,
+    // causing PrepareOffer to go through kReuseExistingShm and set was_old_shm_region_reopened_ = true
+    InitialiseSkeleton(instance_identifier).WithAlreadyConnectedProxy();
+    EXPECT_TRUE(skeleton_->PrepareOffer(events_, fields_, std::move(kEmptyRegisterShmObjectTraceCallback)).has_value());
+
+    // When Register is called on the reopened skeleton
+    const auto result = skeleton_->Register(test::kDummyElementFqId,
+                                            test::kDefaultEventProperties,
+                                            memory::DataTypeSizeInfo{sizeof(std::uint8_t), alignof(std::uint8_t)});
+
+    // Then it returns valid pointer to the opened (not newly created) SHM ASIL-B event control
+    EXPECT_NE(result.event_control_asil_b, nullptr);
+}
+
+INSTANTIATE_TEST_SUITE_P(SkeletonRegisterParamaterisedFixture,
+                         SkeletonRegisterParamaterisedFixture,
+                         Values(ServiceElementType::EVENT, ServiceElementType::FIELD));
+
+INSTANTIATE_TEST_SUITE_P(SkeletonRegisterParamaterisedDeathTest,
+                         SkeletonRegisterParamaterisedDeathTest,
+                         Values(ServiceElementType::EVENT, ServiceElementType::FIELD));
+
+class SkeletonCreateFixture : public Test
+{
+  protected:
+    void SetUp() override
+    {
+        ON_CALL(*fcntl_mock_, flock(_, kNonBlockingExclusiveLockOperation)).WillByDefault(Return(score::cpp::blank{}));
+        ON_CALL(*fcntl_mock_, flock(_, kUnlockOperation)).WillByDefault(Return(score::cpp::blank{}));
+
+        ON_CALL(partial_restart_path_builder_mock_, GetLolaPartialRestartDirectoryPath())
+            .WillByDefault(Return(partial_restart_directory_path_.Native()));
+        ON_CALL(partial_restart_path_builder_mock_,
+                GetServiceInstanceExistenceMarkerFilePath(test::kDefaultLolaInstanceId))
+            .WillByDefault(Return(service_existence_marker_file_path_));
+        ON_CALL(partial_restart_path_builder_mock_, GetServiceInstanceUsageMarkerFilePath(test::kDefaultLolaInstanceId))
+            .WillByDefault(Return(service_usage_marker_file_path_));
+
+        ON_CALL(*fcntl_mock_, open(StrEq(service_existence_marker_file_path_.data()), _, _))
+            .WillByDefault(Return(existence_marker_file_descriptor_));
+        ON_CALL(*fcntl_mock_, open(StrEq(service_usage_marker_file_path_.data()), _, _))
+            .WillByDefault(Return(usage_marker_file_descriptor_));
+        ON_CALL(*stat_mock_, chmod(StrEq(service_usage_marker_file_path_.data()), _))
+            .WillByDefault(Return(score::cpp::blank{}));
+        ON_CALL(*stat_mock_, stat(_, _, _))
+            .WillByDefault([](const char* const file, os::StatBuffer& buf, const bool resolve_symlinks) {
+                return os::Stat::Default()->stat(file, buf, resolve_symlinks);
+            });
+    }
+
+    void TearDown() override
+    {
+        std::ignore =
+            filesystem::FilesystemFactory{}.CreateInstance().standard->RemoveAll(partial_restart_directory_path_);
+    }
+
+#if defined(__QNXNTO__)
+    filesystem::Path partial_restart_directory_path_{"/tmp_discovery/partial_restart_directory_path"};
+    std::string service_existence_marker_file_path_{"/tmp_discovery/service_existence_marker_file_path"};
+    std::string service_usage_marker_file_path_{"/tmp_discovery/service_usage_marker_file_path"};
+#else
+    filesystem::Path partial_restart_directory_path_{"/tmp/partial_restart_directory_path"};
+    std::string service_existence_marker_file_path_{"/tmp/service_existence_marker_file_path"};
+    std::string service_usage_marker_file_path_{"/tmp/service_usage_marker_file_path"};
+#endif
+
+    InstanceIdentifier instance_identifier_ =
+        make_InstanceIdentifier(test::kValidMinimalAsilInstanceDeployment, test::kValidMinimalTypeDeployment);
+    os::MockGuard<::testing::NiceMock<os::FcntlMock>> fcntl_mock_{};
+    os::MockGuard<::testing::NiceMock<os::StatMock>> stat_mock_{};
+
+    ::testing::NiceMock<ShmPathBuilderMock> shm_path_builder_mock_{};
+    ::testing::NiceMock<PartialRestartPathBuilderMock> partial_restart_path_builder_mock_{};
+
+    const std::int32_t existence_marker_file_descriptor_{10U};
+    const std::int32_t usage_marker_file_descriptor_{11U};
+};
+
+TEST_F(SkeletonCreateFixture, CreateWorks)
+{
+    EXPECT_NE(
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem::FilesystemFactory{}.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_)),
+        nullptr);
+}
+
+TEST_F(SkeletonCreateFixture, CreatingSkeletonWillCreateExistenceMarkerFile)
+{
+    RecordProperty("Verifies", "SCR-31549236");
+    RecordProperty("Description", "Checks that creating a Skeleton will create a service existence marker file.");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("Priority", "1");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    // Expecting that the service existence marker file will be opened
+    EXPECT_CALL(*fcntl_mock_, open(StrEq(service_existence_marker_file_path_.data()), _, _))
+        .WillOnce(Return(existence_marker_file_descriptor_));
+
+    // When creating a Skeleton
+    score::cpp::ignore =
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem::FilesystemFactory{}.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_));
+}
+
+TEST_F(SkeletonCreateFixture, CreatingSkeletonWillTryToLockExistenceMarkerFile)
+{
+    RecordProperty("Verifies", "SCR-31549236");
+    RecordProperty("Description", "Checks that creating a Skeleton will flock the service existence marker file.");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("Priority", "1");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    // Expecting that the service existence marker file will be flocked
+    EXPECT_CALL(*fcntl_mock_, flock(existence_marker_file_descriptor_, kNonBlockingExclusiveLockOperation))
+        .WillOnce(Return(score::cpp::blank{}));
+    EXPECT_CALL(*fcntl_mock_, flock(existence_marker_file_descriptor_, kUnlockOperation))
+        .WillOnce(Return(score::cpp::blank{}));
+
+    // When creating a Skeleton
+    score::cpp::ignore =
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem::FilesystemFactory{}.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_));
+}
+
+TEST_F(SkeletonCreateFixture, CreateReturnsNullPtrIfAnotherInstanceOfTheSameSkeletonStillExists)
+{
+    auto skeleton_0 =
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem::FilesystemFactory{}.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_));
+    EXPECT_NE(skeleton_0, nullptr);
+
+    std::unique_ptr<ShmPathBuilderMock> shm_path_builder_mock_ptr_1{std::make_unique<ShmPathBuilderMock>()};
+    std::unique_ptr<PartialRestartPathBuilderMock> partial_restart_path_builder_mock_ptr_1{
+        std::make_unique<PartialRestartPathBuilderMock>()};
+    auto skeleton_1 = lola::Skeleton::Create(instance_identifier_,
+                                             filesystem::FilesystemFactory{}.CreateInstance(),
+                                             std::move(shm_path_builder_mock_ptr_1),
+                                             std::move(partial_restart_path_builder_mock_ptr_1));
+    EXPECT_EQ(skeleton_1, nullptr);
+}
+
+TEST_F(SkeletonCreateFixture, CreateReturnsNullPtrIfCreatePartialRestartDirFails)
+{
+    score::filesystem::FilesystemFactoryFake filesystem_fake{};
+    EXPECT_CALL(filesystem_fake.GetUtils(), CreateDirectories(partial_restart_directory_path_, _))
+        .WillOnce(Return(MakeUnexpected(score::filesystem::ErrorCode::kCouldNotCreateDirectory)));
+
+    EXPECT_EQ(
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem_fake.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_)),
+        nullptr);
+}
+
+TEST_F(SkeletonCreateFixture, CreateReturnsNullPtrIfOpeningServiceExistenceMarkerFileFails)
+{
+    EXPECT_CALL(*fcntl_mock_, open(StrEq(service_existence_marker_file_path_.data()), _, _))
+        .WillOnce(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EPERM))));
+
+    EXPECT_EQ(
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem::FilesystemFactory{}.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_)),
+        nullptr);
+}
+
+TEST_F(SkeletonCreateFixture, CreateReturnsSkeletonIfExistenceMarkerFileCanBeExclusivelyLocked)
+{
+    ON_CALL(*fcntl_mock_, flock(existence_marker_file_descriptor_, kNonBlockingExclusiveLockOperation))
+        .WillByDefault(Return(score::cpp::blank{}));
+    ON_CALL(*fcntl_mock_, flock(existence_marker_file_descriptor_, kUnlockOperation))
+        .WillByDefault(Return(score::cpp::blank{}));
+
+    EXPECT_NE(
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem::FilesystemFactory{}.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_)),
+        nullptr);
+}
+
+TEST_F(SkeletonCreateFixture, CreateReturnsNullPtrIfExistenceMarkerFileCannotBeExclusivelyLocked)
+{
+    RecordProperty("Verifies", "SCR-31549236, SCR-31549657");
+    RecordProperty("Description",
+                   "Checks that a Skeleton cannot be created if the service existence marker file cannot be flocked.");
+    RecordProperty("TestType", "Requirements-based test");
+    RecordProperty("Priority", "1");
+    RecordProperty("DerivationTechnique", "Analysis of requirements");
+
+    EXPECT_CALL(*fcntl_mock_, flock(existence_marker_file_descriptor_, kNonBlockingExclusiveLockOperation))
+        .WillOnce(Return(score::cpp::make_unexpected(os::Error::createFromErrno(EWOULDBLOCK))));
+
+    EXPECT_EQ(
+        lola::Skeleton::Create(instance_identifier_,
+                               filesystem::FilesystemFactory{}.CreateInstance(),
+                               std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                               std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_)),
+        nullptr);
+}
+
+using SkeletonCreateDeathTest = SkeletonCreateFixture;
+TEST_F(SkeletonCreateDeathTest,
+       CreatingSkeletonWithInstanceIdentifierWhichDoesNotContainLolaServiceInstanceDeploymentTerminates)
+{
+    // When creating a Skeleton with an InstanceIdentifier which contains a blank service instance deployment
+    // Then the program terminates
+    const InstanceIdentifier instance_identifier_with_blank_service_instance_deployment = make_InstanceIdentifier(
+        test::kValidMinimalQmInstanceDeploymentWithBlankBinding, test::kValidMinimalTypeDeployment);
+    EXPECT_DEATH(score::cpp::ignore = lola::Skeleton::Create(
+                     instance_identifier_with_blank_service_instance_deployment,
+                     filesystem::FilesystemFactory{}.CreateInstance(),
+                     std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                     std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_)),
+                 ".*");
+}
+
+TEST_F(SkeletonCreateDeathTest,
+       CreatingSkeletonWithInstanceIdentifierWhichDoesNotContainLolaServiceTypeDeploymentTerminates)
+{
+    // When creating a Skeleton with an InstanceIdentifier which contains a blank service instance deployment
+    // Then the program terminates
+    const InstanceIdentifier instance_identifier_with_blank_service_instance_deployment = make_InstanceIdentifier(
+        test::kValidMinimalQmInstanceDeployment, test::kValidMinimalTypeDeploymentWithBlankBinding);
+    EXPECT_DEATH(score::cpp::ignore = lola::Skeleton::Create(
+                     instance_identifier_with_blank_service_instance_deployment,
+                     filesystem::FilesystemFactory{}.CreateInstance(),
+                     std::make_unique<ShmPathBuilderFacade>(shm_path_builder_mock_),
+                     std::make_unique<PartialRestartPathBuilderFacade>(partial_restart_path_builder_mock_)),
+                 ".*");
+}
+
+}  // namespace
+}  // namespace score::mw::com::impl::lola

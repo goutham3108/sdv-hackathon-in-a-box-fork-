@@ -1,0 +1,104 @@
+# *******************************************************************************
+# Copyright (c) 2026 Contributors to the Eclipse Foundation
+#
+# See the NOTICE file(s) distributed with this work for additional
+# information regarding copyright ownership.
+#
+# This program and the accompanying materials are made available under the
+# terms of the Apache License Version 2.0 which is available at
+# https://www.apache.org/licenses/LICENSE-2.0
+#
+# SPDX-License-Identifier: Apache-2.0
+# *******************************************************************************
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+*.bin
+
+# Root-level archives produced during packaging
+/*.tar
+/*.tar.gz
+/*.tar.xz
+/*.tgz
+/*.zip
+
+
+# Bazel / local build outputs
+bazel-*
+/bazel-bin/
+/bazel-out/
+/bazel-testlogs/
+/bazel-compile-commands/
+/.bazel-cache/
+/.bazel-repo-cache/
+user.bazelrc
+external
+
+# Generated / temporary build artifacts
+/build/
+/dist/
+/out/
+/tmp/
+/.tmp/
+*.pyc
+*.pyo
+*.pyd
+
+# Caches
+.ruff_cache
+/.cache/
+__pycache__/
+
+# docs:incremental and docs:ide_support build artifacts
+_build
+ubproject.toml
+
+# Vale - editorial style guide
+.vale.ini
+styles/
+
+# direnv - folder-specific bash configuration
+.envrc
+
+# Python
+.venv
+/.coverage
+
+# Compiler commands database
+/compile_commands.json
+
+# LLM files
+/.llm_tmp
+
+# Coverage data
+coverage_linux/
