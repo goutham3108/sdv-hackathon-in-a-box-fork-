@@ -73,6 +73,13 @@ sudo apt update
 sudo apt install -y build-essential pkg-config libssl-dev python3 git curl \
   xz-utils rsync openssh-client file
 ```
+```bash
+sudo apt install -y dpkg-dev
+sudo apt install -y libxml2 || sudo apt install -y libxml2-16
+LIBDIR="/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
+[ -e "$LIBDIR/libxml2.so.2" ] || sudo ln -sf "$(ls $LIBDIR/libxml2.so.[0-9]* | sort -V | tail -1)" "$LIBDIR/libxml2.so.2"
+[ -e "$LIBDIR/libxml2.so.2" ] && echo OK || echo MISSING
+```
 
 Also install Host machine :
 
@@ -157,13 +164,13 @@ bash sdv-hack-demo/package-aarch64.sh
 | `sdv-hack-demo/dist/body-control-aarch64.tar.gz` | Separate standalone LoLa/KUKSA body-control example |
 
 
-`Note`: If the native build succeeded but the Docker build failed, fix the reported
-Docker error and retry only the runtime and packaging:
+`Note`: If the native build succeeded but the Docker build failed, fix the
+reported error, then retry the runtime build and packaging on the host machine:
 
 ```bash
 cd ~/sdv-hackathon-in-a-box
-bash sdv-hack-demo/build-runtime-aarch64.sh 
-bash sdv-hack-demo/package-aarch64.sh
+bash sdv-hack-demo/build-runtime-aarch64.sh &&
+  bash sdv-hack-demo/package-aarch64.sh
 ```
 
 `Note` : Do not package stale binaries or an old runtime image after a failed build.
