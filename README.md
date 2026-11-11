@@ -54,7 +54,7 @@ Hardware : Raspberry pi 5 (64 bit Linux), LED , Switch
 Software Stack : SCORE , SDV Runtime 
 
 ```bash
-git clone https://github.com/chheis/sdv-hackathon-in-a-box.git -b score-middleware-integration
+git clone -b score-middleware-integration --single-branch https://github.com/goutham3108/sdv-hackathon-in-a-box-fork-.git
 ```
 
 `Note`: Use dedicated Raspberry Pi 5 HW and a trusted WIFI network.
