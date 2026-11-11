@@ -39,7 +39,8 @@
 #include <vsomeip/vsomeip.hpp>
 
 #include <kvsbuilder.hpp>
-#include "high_beam_udp_protocol.h"
+#include "sdv-hack-demo/include/high_beam_udp_protocol.h"
+#include "sdv-hack-demo/remote_app/test_payloads.h"
 #include "sdv-hack-demo/include/speed_payload.h"
 #include "score/mw/lifecycle/report_running.h"
 #include "score/mw/log/logging.h"

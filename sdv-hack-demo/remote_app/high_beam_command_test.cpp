@@ -2,7 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "high_beam_udp_protocol.h"
+#include "sdv-hack-demo/include/high_beam_udp_protocol.h"
+#include "sdv-hack-demo/remote_app/test_payloads.h"
 
 int main() {
     using high_beam_udp::CommandResult;

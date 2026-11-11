@@ -3,22 +3,31 @@
 # SPDX-License-Identifier: Apache-2.0
 
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+cc_library(
+    name = "test_payloads",
+    hdrs = ["test_payloads.h"],
+)
 
 cc_test(
     name = "high_beam_command_test",
-    srcs = ["high_beam_command_test.cpp", "high_beam_udp_protocol.h"],
+    srcs = ["high_beam_command_test.cpp"],
+    deps = [
+        ":test_payloads",
+        "//sdv-hack-demo:high_beam_udp_protocol",
+    ],
 )
 
 cc_binary(
     name = "remote_app",
-    srcs = [
-        "high_beam_udp_protocol.h",
-        "main.cpp",
-    ],
+    srcs = ["main.cpp"],
     data = ["//sdv-hack-demo:signal_routes.json"],
     visibility = ["//visibility:public"],
     deps = [
+        ":test_payloads",
+        "//sdv-hack-demo:high_beam_udp_protocol",
         "//sdv-hack-demo:speed_payload",
         "@score_lifecycle//score/launch_manager:lifecycle_cc",
         "@score_logging//score/mw/log:log",

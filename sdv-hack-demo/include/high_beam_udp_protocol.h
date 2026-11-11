@@ -2,10 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-// Local copy of the UDP protocol header so sdv-hack-demo is self-contained.
-
-#ifndef C42E85F8_45AA_47BE_A289_0F27530B0FE5
-#define C42E85F8_45AA_47BE_A289_0F27530B0FE5
 #ifndef HIGH_BEAM_UDP_PROTOCOL_H_
 #define HIGH_BEAM_UDP_PROTOCOL_H_
 
@@ -30,6 +26,11 @@ struct Frame {
     std::uint8_t payload_size;
     std::array<std::uint8_t, kMaxPayloadSize> payload{};
 };
+
+inline Frame BooleanUpdate(std::uint16_t service, std::uint16_t instance,
+                           std::uint16_t event, bool value) {
+    return Frame{service, instance, event, 1U, {static_cast<std::uint8_t>(value)}};
+}
 
 inline std::array<std::uint8_t, kFrameSize> Encode(const Frame& frame) {
     std::array<std::uint8_t, kFrameSize> bytes{};
@@ -63,9 +64,19 @@ inline std::optional<Frame> Decode(const std::uint8_t* bytes, const std::size_t 
     return frame;
 }
 
+enum class CommandResult { kMalformed, kDisplayed, kApplied, kOutputFailed };
+
+template <typename WriteOutput>
+CommandResult ApplyCommand(const Frame& frame, bool output_available, WriteOutput write_output) {
+    if (frame.payload_size != 1U || frame.payload[0] > 1U) {
+        return CommandResult::kMalformed;
+    }
+    if (!output_available) {
+        return CommandResult::kDisplayed;
+    }
+    return write_output(frame.payload[0] == 1U) ? CommandResult::kApplied : CommandResult::kOutputFailed;
+}
+
 }  // namespace high_beam_udp
 
 #endif  // HIGH_BEAM_UDP_PROTOCOL_H_
-
-
-#endif /* C42E85F8_45AA_47BE_A289_0F27530B0FE5 */

@@ -30,7 +30,7 @@ flowchart TB
       LoLa["SCORE mw::com / LoLa shared memory"]
       Gateway["gatewayd: generic proxy / skeleton and serializer"]
       Someip["someipd: SOME/IP binding"]
-      Bridge["vehicle_high_beam_bridge: route lookup and UDP encoding"]
+      Bridge["udp_bridge: route lookup and UDP encoding"]
       Client -->|actuator target| Broker
       Broker --> Mapper --> Worker --> Adapter
       Adapter -->|publish Tx| LoLa
@@ -38,7 +38,7 @@ flowchart TB
       Gateway <-->|SOCom IPC| Someip
       Someip <-->|local vsomeip events| Bridge
    end
-   Remote["Remote Raspberry Pi: vehicle_high_beam_remote_app"]
+   Remote["Remote Raspberry Pi: remote_app"]
    Bridge -->|UDP remote port 35001| Remote
    Remote -->|UDP vehicle port 35000| Bridge
    Gateway -->|publish Rx| LoLa
@@ -48,7 +48,9 @@ flowchart TB
    Broker -->|gRPC subscription| Client
 ```
 
-The remote app handles UDP directly. There is no remote bridge or remote `someipd` process. In `direct` command mode the legacy vehicle app publishes the body Tx instance instead of KUKSA. Never offer the same Tx instance from two publishers.
+The remote app handles UDP directly. There is no remote bridge or remote `someipd` process. The KUKSA provider both publishes body commands and receives feedback. In `direct` command mode the vehicle app owns the body Tx instance instead of KUKSA, but only implements high-beam publication. Never offer the same Tx instance from two publishers.
+
+The broker exposes KUKSA VAL v1, VAL v2, and SDV Databroker v1. The vehicle menu uses VAL v2 `Actuate`. Its old high-beam instance specifiers currently differ from the packaged body-control manifest.
 
 ## Horn Actuation and Feedback
 
@@ -64,9 +66,9 @@ Request `Vehicle.Body.Horn.IsActive = true` through an actuator-target API. Writ
 
 Return traffic follows the reverse transport path. `gatewayd` deserializes and publishes the Rx sample on `/body_control_module/network_rx`. The provider polls typed subscriptions and uses `message_to_update()` to check direction, datatype, quality, age, and configured bounds before updating the broker's current value.
 
-**Queued dispatch, received application feedback, and physical actuation are different outcomes.** API acceptance proves only queueing. Bridge reception does not prove remote delivery. UDP is best-effort, and a matching returned value is not a uniquely correlated acknowledgement or proof of a physical actuator operating.
+Returned values report remote software state over best-effort UDP. Check hardware separately when verifying LED operation.
 
-Provider implementation files belong to the separately supplied `kuksa-databroker` checkout: `mw_com_provider/src/provider.rs`, `mapper.rs`, `score_bindings.rs`, `gateway_adapter.rs`, and `gateway_samples.rs`. That checkout is not included in this repository snapshot.
+Provider implementation files are included under [kuksa-databroker/mw_com_provider/src](kuksa-databroker/mw_com_provider/src/): `provider.rs`, `mapper.rs`, `score_bindings.rs`, `gateway_adapter.rs`, and `gateway_samples.rs`.
 
 ## Identifiers
 
@@ -133,11 +135,11 @@ The dynamics service defines `speed` and `speedAck`. The remote echoes a vehicle
 
 The provider generator also refreshes `mw_com_provider/generated/gateway_bindings.rs` and `gateway_runtime.rs` in the required KUKSA checkout. Its composition entry point is `databroker-mw-com/src/main.rs`. Gateway-compatible mappings must use the matching gateway adapter and LoLa manifest, not the standalone `BodyControlModuleService` profile's different names and native sample layouts.
 
-The demo targets are built in the `inc_someip_gateway/` Bazel workspace, with the repository root added to Bazel's package path. Packaging selects `bazel-out/aarch64-fastbuild/bin` from that workspace and from `communication/` instead of relying on the latest `bazel-bin` symlink. It compiles the demo gateway JSON as `mw_someip_config.bin` and ships a matching `mw_com_config.json`; the gateway's generic window-control/echo config is not used.
+The demo targets are built in the `inc_someip_gateway/` Bazel workspace, with the repository root added to Bazel's package path. The build compiles the demo gateway JSON as `mw_someip_config.bin`. Packaging takes gateway/demo artifacts from `bazel-out/aarch64-fastbuild/bin`, resolves communication artifacts through that workspace's `bazel-bin`, and ships a matching `mw_com_config.json`; the gateway's generic window-control/echo config is not used.
 
 The vehicle app uses the pinned `@kuksa_proto` repository declared in the gateway's `MODULE.bazel` for its VAL v2 gRPC client. `third_party/kuksa_proto/BUILD.bazel` is the BUILD template for that external repository, not a local package containing proto sources.
 
-The vehicle archive includes gateway daemons/runfiles, bridge, broker/CLI, provider config, vehicle app/runfiles, serializers, and launchers. It excludes the separate `kuksa_high_beam_udp_provider`. The remote archive contains the remote app/runfiles and launch/configuration files. Regenerate, rebuild, package, and redeploy both archives together after signal-contract changes.
+The vehicle archive includes gateway daemons/runfiles, bridge, broker/CLI, provider config, vehicle app/runfiles, serializers, launchers, and the saved ARM64 runtime image. It excludes the separate `kuksa_high_beam_udp_provider`. The remote archive contains the remote app/runfiles and launch/configuration files. Regenerate, rebuild, package, and redeploy both archives together after signal-contract changes.
 
 The vehicle launcher waits for gateway receive shared memory before KUKSA startup, budgets about two minutes for broker readiness, and stops stale KUKSA retry loops before checking port `55555`. It detects dead gateway daemons and retries a stuck gateway IPC handshake. Provider subscription retries reuse the existing LoLa runtime and Tx offer rather than creating a second skeleton.
 
@@ -165,6 +167,12 @@ Extract that archive to `~/body-control-demo` and start it independently. Do not
 
 ```bash
 cd ~/body-control-demo
-./databroker-cli get Vehicle.Speed
-./databroker-cli actuate Vehicle.Body.Horn.IsActive true
+./databroker-cli
+```
+
+At the CLI prompt:
+
+```text
+get Vehicle.Speed
+actuate Vehicle.Body.Horn.IsActive true
 ```

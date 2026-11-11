@@ -19,14 +19,12 @@ cc_test(
 
 cc_binary(
     name = "udp_bridge",
-    srcs = [
-        "high_beam_udp_protocol.h",
-        "main.cpp",
-    ],
+    srcs = ["main.cpp"],
     data = ["//sdv-hack-demo:signal_routes.json"],
     visibility = ["//visibility:public"],
     deps = [
         ":service_registration",
+        "//sdv-hack-demo:high_beam_udp_protocol",
         "//sdv-hack-demo:speed_payload",
         "@score_lifecycle//score/launch_manager:lifecycle_cc",
         "@score_logging//score/mw/log:log",

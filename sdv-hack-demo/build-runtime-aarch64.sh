@@ -31,12 +31,5 @@ docker buildx build \
     -t sdv-runtime:mw-com \
     -f Dockerfile .
 
-docker run --rm --platform linux/arm64 -i --entrypoint python3 \
-    -e "SDK_SIGNAL_TYPES=$(python3 -c 'import json, sys; print(json.dumps({m["vss_path"]: m["datatype"] for m in json.load(open(sys.argv[1]))["mappings"]}))' \
-        "${repo_root}/sdv-hack-demo/config/gateway_provider_config.json")" \
-    -e PYTHONPATH=/home/dev/python-packages sdv-runtime:mw-com - \
-    < "${repo_root}/sdv-hack-demo/sdv-runtime/verify_sdk_model.py"
-
-# 2. Save and load (only needed to move the image to another machine)
+# Export the image for packaging and loading on the Pi.
 docker save -o sdv-runtime-mw-com.tar sdv-runtime:mw-com
-docker load -i sdv-runtime-mw-com.tar

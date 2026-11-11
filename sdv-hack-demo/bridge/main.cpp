@@ -26,7 +26,7 @@
 #include <nlohmann/json.hpp>
 #include <vsomeip/vsomeip.hpp>
 
-#include "high_beam_udp_protocol.h"
+#include "sdv-hack-demo/include/high_beam_udp_protocol.h"
 #include "sdv-hack-demo/bridge/service_registration.h"
 #include "sdv-hack-demo/include/speed_payload.h"
 #include "score/mw/lifecycle/report_running.h"

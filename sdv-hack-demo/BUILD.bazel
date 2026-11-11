@@ -8,6 +8,18 @@ load("@score_someip_gateway//bazel/tools:someip_config.bzl", "generate_someip_co
 
 exports_files(["signal_routes.json"])
 
+cc_library(
+    name = "high_beam_udp_protocol",
+    hdrs = ["include/high_beam_udp_protocol.h"],
+    visibility = ["//visibility:public"],
+)
+
+cc_test(
+    name = "high_beam_udp_protocol_test",
+    srcs = ["include/high_beam_udp_protocol_test.cpp"],
+    deps = [":high_beam_udp_protocol"],
+)
+
 # Gateway configuration for this demo. Built here so inc_someip_gateway stays unmodified.
 generate_someip_config_bin(
     name = "gateway_config",
