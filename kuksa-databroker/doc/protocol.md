@@ -41,7 +41,6 @@ This is an overview of the APIs supported described using the perspectives above
 | ------------------------ |-----|-----|-----|-----|-----|-----|-----|-----|-----|
 | gRPC (kuksa.val.v2)                     | Yes | Yes | Yes | No  | No  | No  | Yes | No  | Yes
 | gRPC (kuksa.val.v1) *Deprecated!*       | Yes | Yes | Yes | Yes | Yes | Yes | No  | No  | No
-| gRPC (sdv.databroker.v1) legacy adapter | No | Yes | Yes | No | No | No | Yes | No | No
 | VISS v2                                 | No  | Yes | Yes | Yes | No  | No  | No  | No  | No
 
 In general it is possible to mix protocols in a deployment, as long as the difference concerning Target/Actuation values are observed.
@@ -57,37 +56,6 @@ For  more information see the `kuksa.val.v2` [documentation](../proto/kuksa/val/
 
 This is the predecessor to `kuksa.val.v2`.
 For  more information see the `kuksa.val.v1` [documentation](../proto/kuksa/val/v1/README.md).
-
-## Legacy Velocitas Compatibility
-
-`databroker-mw-com` also enables `sdv.databroker.v1.Broker` on the same gRPC
-address as VAL v1/v2. Other server entrypoints must explicitly enable
-`grpc::server::Api::SdvDatabrokerV1`. No additional Python client package or
-second broker process is required.
-
-- `GetDatapoints` reads current values and returns legacy failure values for
-	unknown paths, unavailable values, or denied access.
-- `SetDatapoints` sends actuator requests through the broker's registered
-	actuation provider, including the in-process SCORE provider. It does not
-	publish current values or store deprecated actuator targets. The reply's
-	per-path errors report rejected values or provider failures.
-- `GetMetadata` returns metadata for exact requested paths, or all entries
-	when the names list is empty.
-- `Subscribe` accepts `SELECT Vehicle.Path[, Vehicle.OtherPath...]` and emits
-	initial current values followed by changes. Expressions, wildcards, aliases,
-	and `WHERE` conditions are rejected with `INVALID_ARGUMENT`, not ignored.
-
-All methods use the existing authorization interceptor and broker permissions.
-The legacy Collector service is not implemented.
-
-Rebuild and replace the guest's `databroker-mw-com` executable to activate this
-service; updating the Python application's import path alone is insufficient.
-Keep the existing provider and SCORE configurations. The requested VSS path
-must be present in the active provider configuration, and an actuator mapping
-must have an available actuation provider. A successful write acknowledges
-dispatch, not physical completion: current-value reads change only after the
-provider reports feedback.
-
 
 ### VISS v2
 

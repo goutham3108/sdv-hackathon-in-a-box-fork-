@@ -79,11 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Starting Databroker with in-process mw::com provider"
     );
 
-    let apis = [
-        grpc::server::Api::KuksaValV1,
-        grpc::server::Api::KuksaValV2,
-        grpc::server::Api::SdvDatabrokerV1,
-    ];
+    let apis = [grpc::server::Api::KuksaValV1, grpc::server::Api::KuksaValV2];
     let server = grpc::server::serve_tcp(
         args.address,
         broker,

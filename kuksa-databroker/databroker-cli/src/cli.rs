@@ -117,8 +117,6 @@ pub enum Commands {
 pub enum Protocol {
     #[clap(name = "kuksa.val.v1")]
     KuksaValV1 = 1,
-    #[clap(name = "sdv.databroker.v1")]
-    SdvDatabrokerV1 = 2,
 }
 
 pub fn set_connected_prompt(interface: &Arc<Interface<DefaultTerminal>>, text: String) {

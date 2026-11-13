@@ -46,7 +46,6 @@ pub enum ServerTLS {
 pub enum Api {
     KuksaValV1,
     KuksaValV2,
-    SdvDatabrokerV1,
 }
 
 impl tonic::service::Interceptor for Authorization {
@@ -229,12 +228,6 @@ where
     // the reflection service first so we can get a Router via add_service.
     let mut reflection_builder = tonic_reflection::server::Builder::configure();
 
-    if apis.contains(&Api::SdvDatabrokerV1) {
-        reflection_builder = reflection_builder.register_encoded_file_descriptor_set(
-            databroker_proto::sdv::databroker::v1::FILE_DESCRIPTOR_SET,
-        );
-    }
-
     if apis.contains(&Api::KuksaValV1) {
         reflection_builder = reflection_builder
             .register_encoded_file_descriptor_set(kuksa::val::v1::FILE_DESCRIPTOR_SET);
@@ -249,15 +242,6 @@ where
     let mut router = server.add_service(reflection_service);
 
     // Phase 2: add the optional gRPC services to the router.
-    if apis.contains(&Api::SdvDatabrokerV1) {
-        router = router.add_optional_service(Some(
-            databroker_proto::sdv::databroker::v1::broker_server::BrokerServer::with_interceptor(
-                broker.clone(),
-                authorization.clone(),
-            ),
-        ));
-    }
-
     if apis.contains(&Api::KuksaValV1) {
         router = router.add_optional_service(Some(
             kuksa::val::v1::val_server::ValServer::with_interceptor(
